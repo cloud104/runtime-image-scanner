@@ -1,17 +1,32 @@
-from kubernetes import client, config
+import base64
+import json
 import logging
 import os
 import queue
-import threading
 import subprocess
-import json
-import base64
+import threading
+import time
+
+from kubernetes import client, config
+from prometheus_client import start_http_server, Gauge, CollectorRegistry
 
 QUEUE = queue.Queue()
 VUL_LIST = dict()
 DEBUG = os.getenv("DEBUG", "y").replace(" ", "").lower()
 log = logging.getLogger(__name__)
 log_format = '%(asctime)s - [%(levelname)s] [%(threadName)s] - %(message)s'
+PROM_REGISTRY = CollectorRegistry()
+VULNERABILITY_GAUGE = Gauge("pod_security_issue", "CVE found in all imagens associated with pod", ["PodName",
+                                                                                                   "Namespace",
+                                                                                                   "Image",
+                                                                                                   "IsPublic",
+                                                                                                   "BaseOS",
+                                                                                                   "VulnerabilityID",
+                                                                                                   "PkgName",
+                                                                                                   "InstalledVersion",
+                                                                                                   "FixedVersion",
+                                                                                                   "Severity"],
+                            registry=PROM_REGISTRY)
 
 if DEBUG.startswith("y"):
     logging.basicConfig(level=logging.DEBUG,
@@ -137,8 +152,11 @@ def scan():
 
         log.debug(cmd)
         trivy_clear_cache = subprocess.Popen(cmd_clear_cache, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        trivy_scan = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        log.debug("STDOUT Clean Cache: {}".format(trivy_clear_cache.stdout.read().decode()))
+        log.debug("STDERR Clean Cache: {}".format(trivy_clear_cache.stderr.read().decode()))
+        log.debug("STATUS CODE Clean Cache {}".format(trivy_clear_cache.returncode))
         trivy_clear_cache.wait()
+        trivy_scan = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         trivy_scan.wait()
         log.debug("STDOUT: {}".format(trivy_scan.stdout.read().decode()))
         log.debug("STDERR: {}".format(trivy_scan.stderr.read().decode()))
@@ -182,7 +200,7 @@ def get_pods_associated_with_ingress():
                         for address in subset.addresses:
                             if address.target_ref.name not in pods:
                                 pods.append(address.target_ref.name)
-    log.debug(pods)
+    log.debug("Pods associated with ingress: {}".format(pods))
     return pods
 
 
@@ -190,28 +208,77 @@ def create_prom_points():
     pods = parse_pods()
     public_pods = get_pods_associated_with_ingress()
     for pod in pods:
-
         p = list(pod.keys())[0]
-        print("*********")
-        print("-- " + p)
         for container in pod[p]['containers']:
-            print("--- " + container)
-            print("    Is Public: " + str(p in public_pods))
-            print("---- VULNERABILIDADES:")
             try:
                 for t in VUL_LIST[container]:
                     for v in t["Vulnerabilities"]:
-                        print("##########################")
-                        print("      VID " + v["VulnerabilityID"])
-                        print("      PKG Name " + v["PkgName"])
-                        print("      Instaled Version " + v["InstalledVersion"])
-                        print("      Fixed in " + v["FixedVersion"])
-                        print("      Severity " + v["Severity"])
-                        print("      Is Public: " + str(p in public_pods))
-                        print("##########################")
+                        VULNERABILITY_GAUGE.labels(
+                            p,
+                            pod[p]['namespace'],
+                            container,
+                            str(p in public_pods),
+                            t["Type"],
+                            v["VulnerabilityID"],
+                            v["PkgName"],
+                            v["InstalledVersion"],
+                            v["FixedVersion"],
+                            v["Severity"]
+                        ).set(1)
+                        log.debug("Set Point to pod: {} with values: |"
+                                  "namespace: {} |"
+                                  "image: {} | "
+                                  "is public? {} | "
+                                  "base os: {} | "
+                                  "CVE: {} |"
+                                  "Package: {} |"
+                                  "Installed Version: {} |"
+                                  "Fixed in Version: {} |"
+                                  "Severity: {}".format(p,
+                                                        pod[p]['namespace'],
+                                                        container,
+                                                        str(p in public_pods),
+                                                        t["Type"],
+                                                        v["VulnerabilityID"],
+                                                        v["PkgName"],
+                                                        v["InstalledVersion"],
+                                                        v["FixedVersion"],
+                                                        v["Severity"])
+                                  )
+
             except TypeError:
-                print("      No vulnerabilities found")
-        print("$$$$$$$$$$")
+                log.debug("Set Point to pod: {} with values: |"
+                          "namespace: {}|"
+                          "image: {} | "
+                          "is public? {} | "
+                          "base os: {} | "
+                          "CVE: {} |"
+                          "Package: {} |"
+                          "Installed Version: {} |"
+                          "Fixed in Version: {} |"
+                          "Severity: {}".format(p,
+                                                pod[p]['namespace'],
+                                                container,
+                                                str(p in public_pods),
+                                                "NA",
+                                                "NA",
+                                                "NA",
+                                                "NA",
+                                                "NA",
+                                                "NA")
+                          )
+                VULNERABILITY_GAUGE.labels(
+                    p,
+                    pod[p]['namespace'],
+                    container,
+                    str(p in public_pods),
+                    "NA",
+                    "NA",
+                    "NA",
+                    "NA",
+                    "NA",
+                    "NA"
+                ).set(0)
 
 
 def start_threads():
@@ -229,9 +296,11 @@ def main():
     else:
         log.debug("using kube config")
         config.load_kube_config()
+    start_http_server(port=8081, addr="0.0.0.0", registry=PROM_REGISTRY)
     start_threads()
     create_prom_points()
 
 
 if __name__ == '__main__':
     main()
+    time.sleep(2000)
