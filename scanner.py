@@ -148,6 +148,21 @@ def scan():
         QUEUE.task_done()
 
 
+def convert_label_selector(label):
+    lbl = str()
+    if type(label) is not dict:
+        raise TypeError("Label must be a dict")
+
+    for key in label:
+        converted_label = "=".join([str(key), str(label[key])])
+        if lbl == '':
+            lbl = converted_label
+        else:
+            lbl = ",".join([lbl, converted_label])
+
+    return lbl
+
+
 def get_pods_associated_with_ingress():
     pods = list()
     extensions = client.ExtensionsV1beta1Api()
@@ -160,11 +175,20 @@ def get_pods_associated_with_ingress():
             for path in rule.http.paths:
                 service = v1.read_namespaced_service(name=path.backend.service_name,
                                                      namespace=ingress.metadata.namespace)
-                endpoint = v1.list_namespaced_endpoints(namespace=ingress.metadata.namespace, label_selector=)
+                endpoint = v1.list_namespaced_endpoints(namespace=ingress.metadata.namespace,
+                                                        label_selector=convert_label_selector(service.spec.selector))
+                for ep in endpoint.items:
+                    for subset in ep.subsets:
+                        for address in subset.addresses:
+                            if address.target_ref.name not in pods:
+                                pods.append(address.target_ref.name)
+    log.debug(pods)
+    return pods
 
 
 def create_prom_points():
     pods = parse_pods()
+    public_pods = get_pods_associated_with_ingress()
     for pod in pods:
 
         p = list(pod.keys())[0]
@@ -172,6 +196,7 @@ def create_prom_points():
         print("-- " + p)
         for container in pod[p]['containers']:
             print("--- " + container)
+            print("    Is Public: " + str(p in public_pods))
             print("---- VULNERABILIDADES:")
             try:
                 for t in VUL_LIST[container]:
@@ -182,6 +207,7 @@ def create_prom_points():
                         print("      Instaled Version " + v["InstalledVersion"])
                         print("      Fixed in " + v["FixedVersion"])
                         print("      Severity " + v["Severity"])
+                        print("      Is Public: " + str(p in public_pods))
                         print("##########################")
             except TypeError:
                 print("      No vulnerabilities found")
