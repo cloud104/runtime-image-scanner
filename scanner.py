@@ -6,27 +6,21 @@ import queue
 import subprocess
 import threading
 import time
+import traceback
+from http.server import BaseHTTPRequestHandler
+from http.server import HTTPServer
+from socketserver import ThreadingMixIn
+from urllib.parse import urlparse
 
 from kubernetes import client, config
-from prometheus_client import start_http_server, Gauge, CollectorRegistry
+from prometheus_client import Gauge, generate_latest, CollectorRegistry, CONTENT_TYPE_LATEST
 
 QUEUE = queue.Queue()
 VUL_LIST = dict()
-DEBUG = os.getenv("DEBUG", "y").replace(" ", "").lower()
+VUL_POINTS = bytes()
+DEBUG = os.getenv("DEBUG", "n").replace(" ", "").lower()
 log = logging.getLogger(__name__)
 log_format = '%(asctime)s - [%(levelname)s] [%(threadName)s] - %(message)s'
-PROM_REGISTRY = CollectorRegistry()
-VULNERABILITY_GAUGE = Gauge("pod_security_issue", "CVE found in all imagens associated with pod", ["PodName",
-                                                                                                   "Namespace",
-                                                                                                   "Image",
-                                                                                                   "IsPublic",
-                                                                                                   "BaseOS",
-                                                                                                   "VulnerabilityID",
-                                                                                                   "PkgName",
-                                                                                                   "InstalledVersion",
-                                                                                                   "FixedVersion",
-                                                                                                   "Severity"],
-                            registry=PROM_REGISTRY)
 
 if DEBUG.startswith("y"):
     logging.basicConfig(level=logging.DEBUG,
@@ -205,6 +199,18 @@ def get_pods_associated_with_ingress():
 
 
 def create_prom_points():
+    registry = CollectorRegistry()
+    vulnerability_gauge = Gauge("pod_security_issue", "CVE found in all images associated with pod",
+                                ["PodName",
+                                 "Namespace",
+                                 "Image",
+                                 "IsPublic",
+                                 "BaseOS",
+                                 "VulnerabilityID",
+                                 "PkgName",
+                                 "InstalledVersion",
+                                 "FixedVersion",
+                                 "Severity"], registry=registry)
     pods = parse_pods()
     public_pods = get_pods_associated_with_ingress()
     for pod in pods:
@@ -213,7 +219,8 @@ def create_prom_points():
             try:
                 for t in VUL_LIST[container]:
                     for v in t["Vulnerabilities"]:
-                        VULNERABILITY_GAUGE.labels(
+                        log.info("Prom point pod: {}".format(p))
+                        vulnerability_gauge.labels(
                             p,
                             pod[p]['namespace'],
                             container,
@@ -247,6 +254,7 @@ def create_prom_points():
                                   )
 
             except TypeError:
+                log.info("Prom point pod: {}".format(p))
                 log.debug("Set Point to pod: {} with values: |"
                           "namespace: {}|"
                           "image: {} | "
@@ -267,7 +275,7 @@ def create_prom_points():
                                                 "NA",
                                                 "NA")
                           )
-                VULNERABILITY_GAUGE.labels(
+                vulnerability_gauge.labels(
                     p,
                     pod[p]['namespace'],
                     container,
@@ -279,6 +287,9 @@ def create_prom_points():
                     "NA",
                     "NA"
                 ).set(0)
+            except KeyError:
+                log.warning("The container {} was not scanned. Wait until next round...".format(container))
+    return generate_latest(registry)
 
 
 def start_threads():
@@ -296,11 +307,59 @@ def main():
     else:
         log.debug("using kube config")
         config.load_kube_config()
-    start_http_server(port=8081, addr="0.0.0.0", registry=PROM_REGISTRY)
+
     start_threads()
-    create_prom_points()
+    global VUL_POINTS
+    VUL_POINTS = create_prom_points()
+
+
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    pass
+
+
+class VulnerabilityHandler(BaseHTTPRequestHandler):
+    def __init__(self, *args, **kwargs):
+        BaseHTTPRequestHandler.__init__(self, *args, **kwargs)
+
+    def do_GET(self):
+        url = urlparse(self.path)
+        if url.path == '/metrics':
+            try:
+                self.send_response(200)
+                self.send_header('Content-Type', CONTENT_TYPE_LATEST)
+                self.end_headers()
+                self.wfile.write(VUL_POINTS)
+            except Exception:
+                self.send_response(500)
+                self.end_headers()
+                self.wfile.write(traceback.format_exc())
+        elif url.path == '/':
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"""<html>
+            <head><title>Container Runtime Vulnerability Scan</title></head>
+            <body>
+            <h1>Hi,</h1>
+            <p>Take a look at <code>/metrics</code> to get metrics.</p>
+            </body>
+            </html>""")
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+
+def http_server_handler(*args, **kwargs):
+    return VulnerabilityHandler(*args, **kwargs)
 
 
 if __name__ == '__main__':
-    main()
-    time.sleep(2000)
+    server = ThreadedHTTPServer(('', 8081), http_server_handler)
+    server.daemon_threads = True
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+
+    while True:
+        log.info("looping")
+        main()
+        VUL_LIST = dict()
+        log.info("Sleeping...")
+        time.sleep(10)
