@@ -1,9 +1,11 @@
 import base64
+import glob
 import json
 import logging
 import os
 import queue
 import subprocess
+import sys
 import threading
 import time
 import traceback
@@ -19,6 +21,12 @@ QUEUE = queue.Queue()
 VUL_LIST = dict()
 VUL_POINTS = bytes()
 DEBUG = os.getenv("DEBUG", "n").replace(" ", "").lower()
+SEC_REPORT_DIR = os.getenv("SEC_REPORT_DIR", "/tmp/secreport")
+TRIVY_REPORT_DIR = os.getenv("SEC_REPORT_DIR", "/tmp/trivyreport")
+SCAN_INTERVAL = os.getenv("SCAN_INTERVAL", "120")
+HTTP_SERVER_PORT = os.getenv("HTTP_PORT", "8080")
+TRIVY_BIN_PATH = os.getenv("TRIVY_BIN_PATH", "./trivy")
+
 log = logging.getLogger(__name__)
 log_format = '%(asctime)s - [%(levelname)s] [%(threadName)s] - %(message)s'
 
@@ -106,7 +114,7 @@ def enqueue():
 
 
 def parse_scan(image):
-    with open("/tmp/{}.json".format(image), "r") as f:
+    with open("{}/{}.json".format(TRIVY_REPORT_DIR, image), "r") as f:
         try:
             vul_list = json.loads(f.read())
         except json.decoder.JSONDecodeError:
@@ -121,15 +129,15 @@ def scan():
         image = list(item.keys())[0]
         safe_image = image.replace("/", "__")
         log.info("Scanning image: {}".format(image))
-        cmd_clear_cache = ["./trivy",
+        cmd_clear_cache = ["{}".format(TRIVY_BIN_PATH),
                            "image",
                            "-c",
                            "{}".format(image)]
-        cmd = ["./trivy",
+        cmd = ["{}".format(TRIVY_BIN_PATH),
                "image",
                "--format=json",
                "--ignore-unfixed=true",
-               "--output=/tmp/{}.json".format(safe_image),
+               "--output={}/{}.json".format(TRIVY_REPORT_DIR, safe_image),
                "{}".format(image)]
 
         if "quay.io" in image:
@@ -311,7 +319,7 @@ def create_prom_points():
 
 
 def write_sec_report(report):
-    with open("/tmp/sec_report.json", 'w') as f:
+    with open("{}/sec_report.json".format(SEC_REPORT_DIR), 'w') as f:
         f.write(json.dumps(report))
 
 
@@ -384,7 +392,7 @@ class VulnerabilityHandler(BaseHTTPRequestHandler):
 
 
 def read_sec_report():
-    with open("/tmp/sec_report.json", 'r') as f:
+    with open("{}/sec_report.json".format(SEC_REPORT_DIR), 'r') as f:
         return f.read().encode()
 
 
@@ -398,11 +406,42 @@ def start_http_server(port):
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
 
+def cleanup():
+    global VUL_LIST
+    VUL_LIST = dict()
+    if os.path.exists(TRIVY_REPORT_DIR):
+        for f in glob.glob("{}/*.json".format(TRIVY_REPORT_DIR)):
+            os.remove(f)
+
+
+def setup():
+    if not os.path.exists(SEC_REPORT_DIR):
+        os.makedirs(SEC_REPORT_DIR)
+
+    if not os.path.exists(TRIVY_REPORT_DIR):
+        os.makedirs(TRIVY_REPORT_DIR)
+
+    if not os.path.exists(TRIVY_BIN_PATH):
+        raise FileNotFoundError("Trivy binary not found at: {}".format(TRIVY_BIN_PATH))
+
+
 if __name__ == '__main__':
-    start_http_server(8081)
+    try:
+        setup()
+    except BaseException as e:
+        log.error(e)
+        sys.exit(1)
+    start_http_server(int(HTTP_SERVER_PORT))
     while True:
-        log.info("looping")
-        main()
-        VUL_LIST = dict()
-        log.info("Sleeping...")
-        time.sleep(10)
+        try:
+            log.info("looping")
+            main()
+            cleanup()
+            log.info("Sleeping...")
+            time.sleep(int(SCAN_INTERVAL))
+        except KeyboardInterrupt:
+            log.info("Bye...")
+            break
+        except BaseException as e:
+            log.error(e)
+
