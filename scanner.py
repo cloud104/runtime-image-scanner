@@ -352,11 +352,14 @@ def http_server_handler(*args, **kwargs):
     return VulnerabilityHandler(*args, **kwargs)
 
 
-if __name__ == '__main__':
-    server = ThreadedHTTPServer(('', 8081), http_server_handler)
+def start_http_server(port):
+    server = ThreadedHTTPServer(('', port), http_server_handler)
     server.daemon_threads = True
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
+
+if __name__ == '__main__':
+    start_http_server(8081)
     while True:
         log.info("looping")
         main()
