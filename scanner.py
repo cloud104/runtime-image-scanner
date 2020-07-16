@@ -52,9 +52,14 @@ def read_secret(namespace, secret):
     v1 = client.CoreV1Api()
     secret = v1.read_namespaced_secret(secret, namespace)
     try:
-        return base64.b64decode(secret.data['.dockerconfigjson']).decode()
+        decoded_password = base64.b64decode(secret.data['.dockerconfigjson']).decode()
     except KeyError:
         raise DockerConfigNotFound("Not found .dockerconfigjson key")
+    load_auth_config = json.loads(decoded_password)
+    registry_addr = list(load_auth_config['auths'].keys())[0]
+    return {"username": load_auth_config['auths'][registry_addr]['username'],
+            "password": load_auth_config['auths'][registry_addr]['password']
+            }
 
 
 def parse_pods():
@@ -84,6 +89,8 @@ def parse_pods():
                         .append(read_secret(pod.metadata.namespace, secret.name))
                 except DockerConfigNotFound:
                     log.info("The Secret {} don't have .dockerconfigjson key.".format(secret.name))
+                except KeyError:
+                    log.info("Invalid docker auth on secret {}".format(secret.name))
 
     return parsed_pod
 
@@ -98,12 +105,12 @@ def unique_images():
                 if not pod[pod_id[0]]['docker_password']:
                     images[image] = {"docker_password": []}
                 else:
-                    images[image] = {"docker_password": [].append(pod[pod_id[0]]['docker_password'])}
+                    images[image] = {"docker_password": pod[pod_id[0]]['docker_password']}
             for image in pod[pod_id[0]]['init_containers']:
                 if not pod[pod_id[0]]['docker_password']:
                     images[image] = {"docker_password": []}
                 else:
-                    images[image] = {"docker_password": [].append(pod[pod_id[0]]['docker_password'])}
+                    images[image] = {"docker_password": pod[pod_id[0]]['docker_password']}
     return images
 
 
@@ -158,7 +165,17 @@ def scan():
         log.debug("STDERR Clean Cache: {}".format(trivy_clear_cache.stderr.read().decode()))
         log.debug("STATUS CODE Clean Cache {}".format(trivy_clear_cache.returncode))
         trivy_clear_cache.wait()
-        trivy_scan = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        if len(item[image]['docker_password']) > 0:
+            log.info("Auth on registry...")
+            env = {"TRIVY_USERNAME": item[image]['docker_password'][0]['username'],
+                   "TRIVY_PASSWORD": item[image]['docker_password'][0]['password']}
+        else:
+            env = {}
+        trivy_scan = subprocess.Popen(cmd,
+                                      stdout=subprocess.PIPE,
+                                      stderr=subprocess.PIPE,
+                                      env=env)
         trivy_scan.wait()
         log.debug("STDOUT: {}".format(trivy_scan.stdout.read().decode()))
         log.debug("STDERR: {}".format(trivy_scan.stderr.read().decode()))
@@ -329,7 +346,7 @@ def write_sec_report(report):
 
 def start_threads():
     enqueue()
-    num_threads = os.getenv("NUM_THREADS", 5)
+    num_threads = os.getenv("NUM_THREADS", 2)
     for _ in range(0, num_threads):
         threading.Thread(target=scan, daemon=True).start()
     QUEUE.join()
