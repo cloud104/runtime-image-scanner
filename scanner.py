@@ -364,7 +364,7 @@ class VulnerabilityHandler(BaseHTTPRequestHandler):
                 self.send_header('Content-Type', CONTENT_TYPE_LATEST)
                 self.end_headers()
                 self.wfile.write(VUL_POINTS)
-            except Exception:
+            except BaseException:
                 self.send_response(500)
                 self.end_headers()
                 self.wfile.write(traceback.format_exc())
@@ -446,6 +446,5 @@ if __name__ == '__main__':
         except KeyboardInterrupt:
             log.info("Bye...")
             break
-        # except BaseException as e:
-        #     log.error(e)
-
+        except BaseException as e:
+            log.error(e)
