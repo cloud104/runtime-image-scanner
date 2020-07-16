@@ -200,6 +200,7 @@ def get_pods_associated_with_ingress():
 
 def create_prom_points():
     registry = CollectorRegistry()
+    to_sec = list()
     vulnerability_gauge = Gauge("pod_security_issue", "CVE found in all images associated with pod",
                                 ["PodName",
                                  "Namespace",
@@ -217,6 +218,14 @@ def create_prom_points():
         p = list(pod.keys())[0]
         for container in pod[p]['containers']:
             try:
+                info_to_sec = {
+                    "docker_image": container,
+                    "pod": p,
+                    "is_public": p in public_pods,
+                    "namespace": pod[p]['namespace'],
+                    "vulnerabilities": VUL_LIST[container]
+                }
+                to_sec.append(info_to_sec)
                 for t in VUL_LIST[container]:
                     for v in t["Vulnerabilities"]:
                         log.info("Prom point pod: {}".format(p))
@@ -287,9 +296,23 @@ def create_prom_points():
                     "NA",
                     "NA"
                 ).set(0)
+                info_to_sec = {
+                    "docker_image": container,
+                    "pod": p,
+                    "is_public": p in public_pods,
+                    "namespace": pod[p]['namespace'],
+                    "vulnerabilities": None
+                }
+                to_sec.append(info_to_sec)
+                write_sec_report(to_sec)
             except KeyError:
                 log.warning("The container {} was not scanned. Wait until next round...".format(container))
     return generate_latest(registry)
+
+
+def write_sec_report(report):
+    with open("/tmp/sec_report.json", 'w') as f:
+        f.write(json.dumps(report))
 
 
 def start_threads():
@@ -343,9 +366,26 @@ class VulnerabilityHandler(BaseHTTPRequestHandler):
             <p>Take a look at <code>/metrics</code> to get metrics.</p>
             </body>
             </html>""")
+        elif url.path == '/report':
+            try:
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(read_sec_report())
+            except FileNotFoundError:
+                self.send_response(404)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps(
+                    {"message": "Report is not available yet. Please come back in fell minutes."}).encode())
         else:
             self.send_response(404)
             self.end_headers()
+
+
+def read_sec_report():
+    with open("/tmp/sec_report.json", 'r') as f:
+        return f.read().encode()
 
 
 def http_server_handler(*args, **kwargs):
