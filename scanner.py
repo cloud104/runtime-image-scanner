@@ -198,6 +198,10 @@ def get_pods_associated_with_ingress():
                 endpoint = v1.list_namespaced_endpoints(namespace=ingress.metadata.namespace,
                                                         label_selector=convert_label_selector(service.spec.selector))
                 for ep in endpoint.items:
+                    if ep.subsets is None:
+                        log.warning("The endpoint of service {} comes empty. Skiping verification".format(
+                            path.backend.service_name))
+                        continue
                     for subset in ep.subsets:
                         for address in subset.addresses:
                             if address.target_ref.name not in pods:
@@ -442,6 +446,6 @@ if __name__ == '__main__':
         except KeyboardInterrupt:
             log.info("Bye...")
             break
-        except BaseException as e:
-            log.error(e)
+        # except BaseException as e:
+        #     log.error(e)
 
