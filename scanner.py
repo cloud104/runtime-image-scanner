@@ -22,10 +22,11 @@ VUL_LIST = dict()
 VUL_POINTS = bytes()
 DEBUG = os.getenv("DEBUG", "n").replace(" ", "").lower()
 SEC_REPORT_DIR = os.getenv("SEC_REPORT_DIR", "/tmp/secreport")
-TRIVY_REPORT_DIR = os.getenv("SEC_REPORT_DIR", "/tmp/trivyreport")
+TRIVY_REPORT_DIR = os.getenv("TRIVY_REPORT_DIR", "/tmp/trivyreport")
 SCAN_INTERVAL = os.getenv("SCAN_INTERVAL", "120")
 HTTP_SERVER_PORT = os.getenv("HTTP_PORT", "8080")
 TRIVY_BIN_PATH = os.getenv("TRIVY_BIN_PATH", "./trivy")
+DISABLE_QUAYIO_SCAN = os.getenv("DISABLE_QUAYIO_SCAN", "no")
 
 log = logging.getLogger(__name__)
 log_format = '%(asctime)s - [%(levelname)s] [%(threadName)s] - %(message)s'
@@ -146,6 +147,10 @@ def scan():
                "--ignore-unfixed=true",
                "--output={}/{}.json".format(TRIVY_REPORT_DIR, safe_image),
                "{}".format(image)]
+
+        if "quay.io" in image and DISABLE_QUAYIO_SCAN == "yes":
+            log.warning("The image {} was not scanned because hosted image is in quay.io registry.".format(image))
+            continue
 
         if "quay.io" in image:
             docker_pull_cmd = [
@@ -393,6 +398,7 @@ class VulnerabilityHandler(BaseHTTPRequestHandler):
             <body>
             <h1>Hi,</h1>
             <p>Take a look at <code>/metrics</code> to get metrics.</p>
+            <p>You can get a full report here: <code>/report</code></p>
             </body>
             </html>""")
         elif url.path == '/report':
