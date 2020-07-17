@@ -195,8 +195,8 @@ def convert_label_selector(label):
     if type(label) is not dict:
         raise TypeError("Label must be a dict")
 
-    for key in label:
-        converted_label = "=".join([str(key), str(label[key])])
+    for key, value in label.items():
+        converted_label = "=".join([str(key), str(value)])
         if lbl == '':
             lbl = converted_label
         else:
