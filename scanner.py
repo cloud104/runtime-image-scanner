@@ -444,10 +444,16 @@ def cleanup():
 
 def setup():
     if not os.path.exists(SEC_REPORT_DIR):
-        os.makedirs(SEC_REPORT_DIR)
+        try:
+            os.makedirs(SEC_REPORT_DIR)
+        except FileExistsError:
+            log.info("Path {} exists. Skiping creation".format(SEC_REPORT_DIR))
 
     if not os.path.exists(TRIVY_REPORT_DIR):
-        os.makedirs(TRIVY_REPORT_DIR)
+        try:
+            os.makedirs(TRIVY_REPORT_DIR)
+        except FileExistsError:
+            log.info("Path {} exists. Skiping creation".format(TRIVY_REPORT_DIR))
 
     if not os.path.exists(TRIVY_BIN_PATH):
         raise FileNotFoundError("Trivy binary not found at: {}".format(TRIVY_BIN_PATH))
