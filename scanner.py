@@ -13,6 +13,7 @@ from http.server import BaseHTTPRequestHandler
 from http.server import HTTPServer
 from socketserver import ThreadingMixIn
 from urllib.parse import urlparse
+from version import VERSION
 
 from kubernetes import client, config
 from prometheus_client import Gauge, generate_latest, CollectorRegistry, CONTENT_TYPE_LATEST
@@ -453,6 +454,7 @@ def setup():
 
 
 if __name__ == '__main__':
+    log.info("Starting Image Scanner version: {}".format(VERSION))
     try:
         setup()
     except BaseException as e:
@@ -461,10 +463,9 @@ if __name__ == '__main__':
     start_http_server(int(HTTP_SERVER_PORT))
     while True:
         try:
-            log.info("looping")
             main()
             cleanup()
-            log.info("Sleeping...")
+            log.info("Sleeping for {}s".format(SCAN_INTERVAL))
             time.sleep(int(SCAN_INTERVAL))
         except KeyboardInterrupt:
             log.info("Bye...")
