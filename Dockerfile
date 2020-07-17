@@ -8,3 +8,4 @@ COPY --from=builder /root/.local /root/.local
 WORKDIR /app
 COPY scanner.py .
 COPY trivy .
+CMD ["/app/scanner.py"]
