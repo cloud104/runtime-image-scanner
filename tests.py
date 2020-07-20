@@ -3,7 +3,7 @@ import unittest
 import os
 import scanner
 from unittest import mock
-from kubernetes import client, config
+from kubernetes import client
 
 
 class TestSetup(unittest.TestCase):
@@ -88,6 +88,59 @@ class TestConvertLabelSelector(unittest.TestCase):
     def test_invalid_entry(self):
         data = '{"ola": "tudo", "bem": "com", "voce": "?"}'
         self.assertRaises(TypeError, scanner.convert_label_selector, data)
+
+
+class TestParsePods(unittest.TestCase):
+    @mock.patch("scanner.list_all_pods")
+    @mock.patch("scanner.read_secret")
+    def test_pods_no_errors(self, mock_read_secret, mock_list_all_pods):
+        pod1 = client.V1Pod(metadata=client.V1ObjectMeta(name="pod1", namespace="teste1"),
+                            spec=client.V1PodSpec(containers=[client.V1Container(name="test", image="teste:1")],
+                                                  init_containers=[client.V1Container(name="test",
+                                                                                      image="init_teste:1")])
+                            )
+        pod2 = client.V1Pod(metadata=client.V1ObjectMeta(name="pod2", namespace="teste2"),
+                            spec=client.V1PodSpec(containers=[client.V1Container(name="test", image="teste:2")],
+                                                  init_containers=[client.V1Container(name="test",
+                                                                                      image="init_teste:2")],
+                                                  image_pull_secrets=[client.V1LocalObjectReference(name="teste2")])
+                            )
+
+        mock_list_all_pods.return_value = client.V1PodList(items=[pod1, pod2]).items
+        mock_read_secret.return_value = "mocked_pass"
+        parsed = scanner.parse_pods()
+
+        self.assertEqual(parsed[0]["pod1"]["namespace"], "teste1")
+        self.assertEqual(parsed[0]["pod1"]["containers"][0], "teste:1")
+        self.assertEqual(parsed[0]["pod1"]["init_containers"][0], "init_teste:1")
+
+        self.assertEqual(parsed[1]["pod2"]["namespace"], "teste2")
+        self.assertEqual(parsed[1]["pod2"]["containers"][0], "teste:2")
+        self.assertEqual(parsed[1]["pod2"]["init_containers"][0], "init_teste:2")
+        self.assertEqual(parsed[1]["pod2"]["docker_password"][0], "mocked_pass")
+
+    @mock.patch("scanner.list_all_pods")
+    @mock.patch("scanner.read_secret")
+    def test_pods_with_errors(self, mock_read_secret, mock_list_all_pods):
+        pod1 = client.V1Pod(metadata=client.V1ObjectMeta(name="pod1", namespace="teste1"),
+                            spec=client.V1PodSpec(containers=[client.V1Container(name="test", image="teste:1")],
+                                                  init_containers=[client.V1Container(name="test",
+                                                                                      image="init_teste:1")])
+                            )
+        pod2 = client.V1Pod(metadata=client.V1ObjectMeta(name="pod2", namespace="teste2"),
+                            spec=client.V1PodSpec(containers=[client.V1Container(name="test", image="teste:2")],
+                                                  init_containers=[client.V1Container(name="test",
+                                                                                      image="init_teste:2")],
+                                                  image_pull_secrets=[client.V1LocalObjectReference(name="teste2")])
+                            )
+
+        mock_list_all_pods.return_value = client.V1PodList(items=[pod1, pod2]).items
+        mock_read_secret.side_effect = scanner.DockerConfigNotFound(Exception)
+        parsed = scanner.parse_pods()
+        self.assertEqual(parsed[1]["pod2"]["docker_password"], [])
+        mock_read_secret.side_effect = KeyError
+        parsed = scanner.parse_pods()
+        self.assertEqual(parsed[1]["pod2"]["docker_password"], [])
 
 
 if __name__ == '__main__':
