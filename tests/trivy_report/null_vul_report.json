@@ -1,0 +1,7 @@
+[
+  {
+    "Target": "debian:10 (debian 10.4)",
+    "Type": "debian",
+    "Vulnerabilities": null
+  }
+]

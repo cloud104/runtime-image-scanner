@@ -143,5 +143,30 @@ class TestParsePods(unittest.TestCase):
         self.assertEqual(parsed[1]["pod2"]["docker_password"], [])
 
 
+class TestUniqueImages(unittest.TestCase):
+    @mock.patch("scanner.parse_pods")
+    def test_unique(self, mock_parse_pods):
+        mock_parse_pods.return_value = [
+            {
+                "pod1": {
+                    "namespace": "teste1",
+                    "containers": ["contaner:1", "container:2"],
+                    "init_containers": ["contaner:1", "container:2"],
+                    "docker_password": []
+                }
+            },
+            {
+                "pod2": {
+                    "namespace": "teste1",
+                    "containers": ["contaner:1", "container:2"],
+                    "init_containers": ["contaner:1", "container:2"],
+                    "docker_password": ["fake"]
+                }
+            }
+        ]
+        size = len(scanner.unique_images())
+        self.assertEqual(size, 2)
+
+
 if __name__ == '__main__':
     unittest.main()
