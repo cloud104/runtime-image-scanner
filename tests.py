@@ -168,5 +168,17 @@ class TestUniqueImages(unittest.TestCase):
         self.assertEqual(size, 2)
 
 
+class TestParseTrivyScan(unittest.TestCase):
+    def test_parse_trivy_scan(self):
+        scanner.TRIVY_REPORT_DIR = "./tests/trivy_report"
+        v = scanner.parse_scan("debian:10")
+        self.assertEqual(v[0]['Type'], "debian")
+
+    def test_parse_trivy_scan_error(self):
+        scanner.TRIVY_REPORT_DIR = "./tests/trivy_report"
+        e = scanner.parse_scan("empty_json")
+        self.assertEqual(e, {})
+
+
 if __name__ == '__main__':
     unittest.main()
