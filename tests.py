@@ -2,6 +2,8 @@ import json
 import unittest
 import os
 import scanner
+from unittest import mock
+from kubernetes import client, config
 
 
 class TestSetup(unittest.TestCase):
@@ -51,6 +53,41 @@ class TestWriteSecReport(unittest.TestCase):
         with open("{}/sec_report.json".format(scanner.SEC_REPORT_DIR), "r") as f:
             t = json.loads(f.read())
         self.assertEqual(type(t), dict)
+
+
+class TestConvertLabelSelector(unittest.TestCase):
+    def test_one_entry(self):
+        data = {"one": "one"}
+        lbl = scanner.convert_label_selector(data)
+        if "," in lbl:
+            has_comma = True
+        else:
+            has_comma = False
+
+        size = len(lbl.split("="))
+        if size == 2:
+            invalid_split = False
+        else:
+            invalid_split = True
+
+        self.assertEqual(has_comma, False)
+        self.assertEqual(invalid_split, False)
+
+    def test_more_entries(self):
+        data = {"one": "one", "two": "two"}
+        lbl = scanner.convert_label_selector(data)
+        last_char = lbl[-1:]
+        self.assertNotEqual(last_char, ",")
+        size = len(lbl.split(","))
+        if size == 2:
+            invalid_split = False
+        else:
+            invalid_split = True
+        self.assertEqual(invalid_split, False)
+
+    def test_invalid_entry(self):
+        data = '{"ola": "tudo", "bem": "com", "voce": "?"}'
+        self.assertRaises(TypeError, scanner.convert_label_selector, data)
 
 
 if __name__ == '__main__':

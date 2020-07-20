@@ -46,7 +46,6 @@ class DockerConfigNotFound(Exception):
 
 def list_all_pods():
     v1 = client.CoreV1Api()
-    v1.list_endpoints_for_all_namespaces()
     return v1.list_pod_for_all_namespaces().items
 
 
