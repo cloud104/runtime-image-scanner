@@ -4,6 +4,7 @@ import os
 import scanner
 from unittest import mock
 from kubernetes import client
+import requests
 
 
 class TestSetup(unittest.TestCase):
@@ -339,6 +340,17 @@ class TestPromPoints(unittest.TestCase):
 
         self.assertTrue(has_container)
 
+class TestHTTPServer(unittest.TestCase):
+    def test_http_ok(self):
+        scanner.start_http_server(12345)
+        r = requests.get("http://127.0.0.1:12345/metrics")
+        self.assertTrue(r.ok)
+        r1 = requests.get("http://127.0.0.1:12345/report")
+        self.assertTrue(r1.ok)
+        r2 = requests.get("http://127.0.0.1:12345/xxxxxx")
+        self.assertFalse(r2.ok)
+        r3 = requests.get("http://127.0.0.1:12345/")
+        self.assertTrue(r3.ok)
 
 if __name__ == '__main__':
     unittest.main()
