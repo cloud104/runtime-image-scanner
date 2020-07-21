@@ -7,11 +7,17 @@ from kubernetes import client
 
 
 class TestSetup(unittest.TestCase):
-    def test_setup(self):
+    def tearDown(self) -> None:
+        os.rmdir("/tmp/trivyreporttest1")
+        os.rmdir("/tmp/secreportdirtest1")
+
+    def test_setup_dirs(self):
+
         scanner.TRIVY_BIN_PATH = "/bin/bash"
         scanner.TRIVY_REPORT_DIR = "/tmp/trivyreporttest1"
         scanner.SEC_REPORT_DIR = "/tmp/secreportdirtest1"
-        self.assertIsNone(scanner.setup())
+        s = scanner.setup()
+        self.assertIsNone(s)
         scanner.TRIVY_BIN_PATH = "/tmp/fake"
         self.assertRaises(FileNotFoundError, scanner.setup)
 
@@ -19,6 +25,8 @@ class TestSetup(unittest.TestCase):
 class TestCleanup(unittest.TestCase):
     def setUp(self) -> None:
         os.makedirs("/tmp/trivyreportstest2")
+        with open("/tmp/trivyreportstest2/file1.json", "a"):
+            os.utime("/tmp/trivyreportstest2/file1.json", None)
 
     def tearDown(self) -> None:
         os.rmdir("/tmp/trivyreportstest2")
