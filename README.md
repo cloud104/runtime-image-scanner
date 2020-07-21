@@ -48,7 +48,7 @@ Todos os parâmetros desse scanner são ajustáveis via variáveis de ambiente.
 
 |Variável|Valor Padrão|Obrigatória|Descrição|
 |---|---|---|---|
-|DEBUG|n|não|Liga / Desliga o debug|
+|LOG_LEVEL|info|não|Nível de log da app. Valores suportados: info, warning, debug, fatal, critical.|
 |SEC_REPORT_DIR|/tmp/secreport|não|Local onde o arquivo .json com o resultado de todos os scans serão gravados|
 |TRIVY_REPORT_DIR|/tmp/trivyreport|não|Local temporário onde os reports do trivy serão gravados|
 |SCAN_INTERVAL|43200|não|Tempo em segundos do intervalo de execução|

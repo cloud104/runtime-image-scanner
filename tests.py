@@ -39,6 +39,7 @@ class TestCleanup(unittest.TestCase):
 
 class TestReadSecReport(unittest.TestCase):
     def test_read_sec_report(self):
+        scanner.LOG_LEVEL = "fatal"
         scanner.SEC_REPORT_DIR = "./tests/sec_reports/01"
         self.assertEqual(type(scanner.read_sec_report()), bytes)
         scanner.SEC_REPORT_DIR = "./tests/fakedir"
@@ -281,6 +282,62 @@ class TestPromPoints(unittest.TestCase):
         else:
             has_container = False
         self.assertFalse(has_container)
+
+    @mock.patch('scanner.parse_pods')
+    @mock.patch('scanner.get_pods_associated_with_ingress')
+    def test_prom_points_with_vulnerabilities(self, mock_public_ingress, mock_parse_pods):
+        scanner.LOG_LEVEL = "fatal"
+        mock_public_ingress.return_value = ["pod2"]
+        mock_parse_pods.return_value = [
+            {
+                "pod1": {
+                    "namespace": "teste1",
+                    "containers": ["container:1", "container:2"],
+                    "init_containers": ["contaner:1", "container:2"],
+                    "docker_password": []
+                }
+            },
+            {
+                "pod2": {
+                    "namespace": "teste1",
+                    "containers": ["container:1", "container:2"],
+                    "init_containers": ["container:1", "container:2"],
+                    "docker_password": ["fake"]
+                }
+            }
+        ]
+
+        scanner.VUL_LIST = {
+            "container:1": [
+                {
+                    "Target": "container:1 (test 1.0)",
+                    "Type": "test",
+                    "Vulnerabilities": [
+                        {
+                            "VulnerabilityID": "CVE-TEST-0000",
+                            "PkgName": "testPKG",
+                            "InstalledVersion": "0.0.0.0",
+                            "FixedVersion": "1.0.0.0",
+                            "Severity": "HIGH"
+                        }
+                    ]
+                }
+            ],
+            "container:2": [
+                {
+                    "Target": "container:2 (test 1.0)",
+                    "Type": "test",
+                    "Vulnerabilities": None
+                }
+            ]
+        }
+        p = scanner.create_prom_points().decode()
+        if ("container:1" in p) and ("container:2" in p):
+            has_container = True
+        else:
+            has_container = False
+
+        self.assertTrue(has_container)
 
 
 if __name__ == '__main__':

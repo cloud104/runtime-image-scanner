@@ -21,7 +21,7 @@ from prometheus_client import Gauge, generate_latest, CollectorRegistry, CONTENT
 QUEUE = queue.Queue()
 VUL_LIST = dict()
 VUL_POINTS = bytes()
-DEBUG = os.getenv("DEBUG", "n").replace(" ", "").lower()
+LOG_LEVEL = os.getenv("LOG_LEVEL", "info").replace(" ", "").lower()
 SEC_REPORT_DIR = os.getenv("SEC_REPORT_DIR", "/tmp/secreport")
 TRIVY_REPORT_DIR = os.getenv("TRIVY_REPORT_DIR", "/tmp/trivyreport")
 SCAN_INTERVAL = os.getenv("SCAN_INTERVAL", "120")
@@ -32,12 +32,18 @@ NUM_THREADS = os.getenv("NUM_THREADS", 2)
 log = logging.getLogger(__name__)
 log_format = '%(asctime)s - [%(levelname)s] [%(threadName)s] - %(message)s'
 
-if DEBUG.startswith("y"):
-    logging.basicConfig(level=logging.DEBUG,
-                        format=log_format)
-else:
-    logging.basicConfig(level=logging.INFO,
-                        format=log_format)
+log_config = {
+    "debug": logging.DEBUG,
+    "info": logging.INFO,
+    "error": logging.ERROR,
+    "critical": logging.CRITICAL,
+    "fatal": logging.FATAL
+}
+
+try:
+    logging.basicConfig(level=log_config[LOG_LEVEL], format=log_format)
+except KeyError:
+    logging.basicConfig(level=logging.INFO, format=log_format)
 
 
 class DockerConfigNotFound(Exception):
