@@ -249,5 +249,39 @@ class TestScan(unittest.TestCase):
         type(scan).RUNNING = sentinel
         self.assertIsNone(scan.trivy())
 
+
+class TestPromPoints(unittest.TestCase):
+    @mock.patch('scanner.parse_pods')
+    @mock.patch('scanner.get_pods_associated_with_ingress')
+    def test_prom_points_wait_next_round(self, mock_public_ingress, mock_parse_pods):
+        mock_public_ingress.return_value = ["pod2"]
+        mock_parse_pods.return_value = [
+            {
+                "pod1": {
+                    "namespace": "teste1",
+                    "containers": ["contaner:1", "container:2"],
+                    "init_containers": ["contaner:1", "container:2"],
+                    "docker_password": []
+                }
+            },
+            {
+                "pod2": {
+                    "namespace": "teste1",
+                    "containers": ["contaner:1", "container:2"],
+                    "init_containers": ["contaner:1", "container:2"],
+                    "docker_password": ["fake"]
+                }
+            }
+        ]
+
+        p = scanner.create_prom_points().decode()
+
+        if ("container:1" in p) or ("container:2" in p):
+            has_container = True
+        else:
+            has_container = False
+        self.assertFalse(has_container)
+
+
 if __name__ == '__main__':
     unittest.main()
