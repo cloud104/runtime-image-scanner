@@ -6,6 +6,12 @@ patch: build-patch git-push
 minor: build-minor git-push
 major: build-major git-push
 
+test:
+	coverage run -m unittest discover
+
+test-reports:
+	coverage html scanner.py
+
 build-dev:
 	docker build --network host -t $(CONTAINER_NAME):devel .
 	@echo "Generated a local docker image with name: $(CONTAINER_NAME):devel"

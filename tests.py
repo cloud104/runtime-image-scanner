@@ -12,7 +12,6 @@ class TestSetup(unittest.TestCase):
         os.rmdir("/tmp/secreportdirtest1")
 
     def test_setup_dirs(self):
-
         scanner.TRIVY_BIN_PATH = "/bin/bash"
         scanner.TRIVY_REPORT_DIR = "/tmp/trivyreporttest1"
         scanner.SEC_REPORT_DIR = "/tmp/secreportdirtest1"
@@ -187,6 +186,68 @@ class TestParseTrivyScan(unittest.TestCase):
         e = scanner.parse_scan("empty_json")
         self.assertEqual(e, {})
 
+
+class TestScan(unittest.TestCase):
+    @mock.patch('subprocess.Popen')
+    @mock.patch("scanner.unique_images")
+    def test_quay_disabled(self, mock_unique_images, mock_popen):
+        sentinel = mock.PropertyMock(side_effect=[True, False])
+        mock_unique_images.return_value = {"quay.io/test/fake:1": {"docker_password": []}}
+        scanner.NUM_THREADS = 1
+        scanner.DISABLE_QUAYIO_SCAN = "yes"
+        scanner.enqueue()
+        stdout = mock.Mock(read=lambda x=b"Stdout - Just a test": x)
+        stderr = mock.Mock(read=lambda x=b"Stderr - Just a test": x)
+        mock_popen.return_value = mock.Mock(returncode=0, stdout=stdout, stderr=stderr)
+        scan = scanner.Scan()
+        type(scan).RUNNING = sentinel
+        self.assertIsNone(scan.trivy())
+
+    @mock.patch('subprocess.Popen')
+    @mock.patch("scanner.unique_images")
+    def test_simple_scan(self, mock_unique_images, mock_popen):
+        sentinel = mock.PropertyMock(side_effect=[True, False])
+        mock_unique_images.return_value = {"debian:10": {"docker_password": []}}
+        scanner.NUM_THREADS = 1
+        scanner.DISABLE_QUAYIO_SCAN = "no"
+        scanner.enqueue()
+        stdout = mock.Mock(read=lambda x=b"Stdout - Just a test": x)
+        stderr = mock.Mock(read=lambda x=b"Stderr - Just a test": x)
+        mock_popen.return_value = mock.Mock(returncode=0, stdout=stdout, stderr=stderr)
+        scan = scanner.Scan()
+        type(scan).RUNNING = sentinel
+        self.assertIsNone(scan.trivy())
+
+    @mock.patch('subprocess.Popen')
+    @mock.patch("scanner.unique_images")
+    def test_quay_enabled(self, mock_unique_images, mock_popen):
+        sentinel = mock.PropertyMock(side_effect=[True, False])
+        mock_unique_images.return_value = {"quay.io/test/fake:1": {"docker_password": []}}
+        scanner.NUM_THREADS = 1
+        scanner.DISABLE_QUAYIO_SCAN = "no"
+        scanner.enqueue()
+        stdout = mock.Mock(read=lambda x=b"Stdout - Just a test": x)
+        stderr = mock.Mock(read=lambda x=b"Stderr - Just a test": x)
+        mock_popen.return_value = mock.Mock(returncode=0, stdout=stdout, stderr=stderr)
+        scan = scanner.Scan()
+        type(scan).RUNNING = sentinel
+        self.assertIsNone(scan.trivy())
+
+    @mock.patch('subprocess.Popen')
+    @mock.patch("scanner.unique_images")
+    def test_auth_registry(self, mock_unique_images, mock_popen):
+        sentinel = mock.PropertyMock(side_effect=[True, False])
+        mock_unique_images.return_value = {"quay.io/test/fake:1": {"docker_password": [{"username": "fake",
+                                                                                        "password": "fakepass"}]}}
+        scanner.NUM_THREADS = 1
+        scanner.DISABLE_QUAYIO_SCAN = "no"
+        scanner.enqueue()
+        stdout = mock.Mock(read=lambda x=b"Stdout - Just a test": x)
+        stderr = mock.Mock(read=lambda x=b"Stderr - Just a test": x)
+        mock_popen.return_value = mock.Mock(returncode=0, stdout=stdout, stderr=stderr)
+        scan = scanner.Scan()
+        type(scan).RUNNING = sentinel
+        self.assertIsNone(scan.trivy())
 
 if __name__ == '__main__':
     unittest.main()

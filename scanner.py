@@ -28,7 +28,7 @@ SCAN_INTERVAL = os.getenv("SCAN_INTERVAL", "120")
 HTTP_SERVER_PORT = os.getenv("HTTP_PORT", "8080")
 TRIVY_BIN_PATH = os.getenv("TRIVY_BIN_PATH", "./trivy")
 DISABLE_QUAYIO_SCAN = os.getenv("DISABLE_QUAYIO_SCAN", "no")
-
+NUM_THREADS = os.getenv("NUM_THREADS", 2)
 log = logging.getLogger(__name__)
 log_format = '%(asctime)s - [%(levelname)s] [%(threadName)s] - %(message)s'
 
@@ -131,63 +131,66 @@ def parse_scan(image):
     return vul_list
 
 
-def scan():
-    while True:
-        item = QUEUE.get()
-        image = list(item.keys())[0]
-        safe_image = image.replace("/", "__")
-        log.info("Scanning image: {}".format(image))
-        cmd_clear_cache = ["{}".format(TRIVY_BIN_PATH),
-                           "image",
-                           "-c",
-                           "{}".format(image)]
-        cmd = ["{}".format(TRIVY_BIN_PATH),
-               "image",
-               "--format=json",
-               "--ignore-unfixed=true",
-               "--output={}/{}.json".format(TRIVY_REPORT_DIR, safe_image),
-               "{}".format(image)]
+class Scan:
+    RUNNING = True
 
-        if "quay.io" in image and DISABLE_QUAYIO_SCAN == "yes":
-            log.warning("The image {} was not scanned because hosted image is in quay.io registry.".format(image))
-            continue
+    def trivy(self):
+        while self.RUNNING:
+            item = QUEUE.get()
+            image = list(item.keys())[0]
+            safe_image = image.replace("/", "__")
+            log.info("Scanning image: {}".format(image))
+            cmd_clear_cache = ["{}".format(TRIVY_BIN_PATH),
+                               "image",
+                               "-c",
+                               "{}".format(image)]
+            cmd = ["{}".format(TRIVY_BIN_PATH),
+                   "image",
+                   "--format=json",
+                   "--ignore-unfixed=true",
+                   "--output={}/{}.json".format(TRIVY_REPORT_DIR, safe_image),
+                   "{}".format(image)]
 
-        if "quay.io" in image:
-            docker_pull_cmd = [
-                "docker",
-                "pull",
-                image
-            ]
-            docker_pull = subprocess.Popen(docker_pull_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            docker_pull.wait()
-            log.debug("Docker pull stdout: {}".format(docker_pull.stdout.read().decode()))
-            log.debug("Docker pull stderr: {}".format(docker_pull.stderr.read().decode()))
-            log.debug("Docker pull status code: {}".format(docker_pull.returncode))
+            if "quay.io" in image and DISABLE_QUAYIO_SCAN == "yes":
+                log.warning("The image {} was not scanned because hosted image is in quay.io registry.".format(image))
+                continue
 
-        log.debug(cmd)
-        trivy_clear_cache = subprocess.Popen(cmd_clear_cache, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        log.debug("STDOUT Clean Cache: {}".format(trivy_clear_cache.stdout.read().decode()))
-        log.debug("STDERR Clean Cache: {}".format(trivy_clear_cache.stderr.read().decode()))
-        log.debug("STATUS CODE Clean Cache {}".format(trivy_clear_cache.returncode))
-        trivy_clear_cache.wait()
+            if "quay.io" in image:
+                docker_pull_cmd = [
+                    "docker",
+                    "pull",
+                    image
+                ]
+                docker_pull = subprocess.Popen(docker_pull_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                docker_pull.wait()
+                log.debug("Docker pull stdout: {}".format(docker_pull.stdout.read().decode()))
+                log.debug("Docker pull stderr: {}".format(docker_pull.stderr.read().decode()))
+                log.debug("Docker pull status code: {}".format(docker_pull.returncode))
 
-        if len(item[image]['docker_password']) > 0:
-            log.info("Auth on registry...")
-            env = {"TRIVY_USERNAME": item[image]['docker_password'][0]['username'],
-                   "TRIVY_PASSWORD": item[image]['docker_password'][0]['password']}
-        else:
-            env = {}
-        trivy_scan = subprocess.Popen(cmd,
-                                      stdout=subprocess.PIPE,
-                                      stderr=subprocess.PIPE,
-                                      env=env)
-        trivy_scan.wait()
-        log.debug("STDOUT: {}".format(trivy_scan.stdout.read().decode()))
-        log.debug("STDERR: {}".format(trivy_scan.stderr.read().decode()))
-        log.debug("STATUS CODE: {}".format(trivy_scan.returncode))
-        log.debug("Parse scan: {}".format(parse_scan(safe_image)))
-        VUL_LIST[image] = parse_scan(safe_image)
-        QUEUE.task_done()
+            log.debug(cmd)
+            trivy_clear_cache = subprocess.Popen(cmd_clear_cache, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            log.debug("STDOUT Clean Cache: {}".format(trivy_clear_cache.stdout.read().decode()))
+            log.debug("STDERR Clean Cache: {}".format(trivy_clear_cache.stderr.read().decode()))
+            log.debug("STATUS CODE Clean Cache {}".format(trivy_clear_cache.returncode))
+            trivy_clear_cache.wait()
+
+            if len(item[image]['docker_password']) > 0:
+                log.info("Auth on registry...")
+                env = {"TRIVY_USERNAME": item[image]['docker_password'][0]['username'],
+                       "TRIVY_PASSWORD": item[image]['docker_password'][0]['password']}
+            else:
+                env = {}
+            trivy_scan = subprocess.Popen(cmd,
+                                          stdout=subprocess.PIPE,
+                                          stderr=subprocess.PIPE,
+                                          env=env)
+            trivy_scan.wait()
+            log.debug("STDOUT: {}".format(trivy_scan.stdout.read().decode()))
+            log.debug("STDERR: {}".format(trivy_scan.stderr.read().decode()))
+            log.debug("STATUS CODE: {}".format(trivy_scan.returncode))
+            log.debug("Parse scan: {}".format(parse_scan(safe_image)))
+            VUL_LIST[image] = parse_scan(safe_image)
+            QUEUE.task_done()
 
 
 def convert_label_selector(label):
@@ -351,9 +354,9 @@ def write_sec_report(report):
 
 def start_threads():
     enqueue()
-    num_threads = os.getenv("NUM_THREADS", 2)
-    for _ in range(0, num_threads):
-        threading.Thread(target=scan, daemon=True).start()
+    scan = Scan()
+    for _ in range(0, NUM_THREADS):
+        threading.Thread(target=scan.trivy, daemon=True).start()
     QUEUE.join()
 
 
