@@ -477,12 +477,85 @@ class TestPodsAssociatedWithIngress(unittest.TestCase):
                 )
             ]
         )
-        mock_extensions_api.return_value(list_ingress_for_all_namespaces=lambda x: ingress_list)
-        mock_core_api.return_value(read_namespaced_service=lambda svc, ns: service,
-                                   list_namespaced_endpoints=lambda ep, ns: endpoint)
+        mock_extensions_api.return_value = mock.Mock(list_ingress_for_all_namespaces=lambda x=ingress_list: x)
+        mock_core_api.return_value = mock.Mock(read_namespaced_service=lambda name, namespace: service,
+                                               list_namespaced_endpoints=lambda namespace,
+                                                                                label_selector: endpoint)
 
         i = scanner.get_pods_associated_with_ingress()
-        print(i)
+        self.assertEqual(len(i), 1)
+
+    @mock.patch('kubernetes.client.ExtensionsV1beta1Api')
+    @mock.patch('kubernetes.client.CoreV1Api')
+    def test_no_pods_associated_with_ingress(self, mock_core_api, mock_extensions_api):
+        ingress_list = client.ExtensionsV1beta1IngressList(
+            kind="IngressList",
+            items=[
+                client.ExtensionsV1beta1Ingress(
+                    metadata=client.V1ObjectMeta(
+                        name="ingress1",
+                        namespace="teste1"
+                    ),
+                    spec=client.ExtensionsV1beta1IngressSpec(
+                        rules=[
+                            client.ExtensionsV1beta1IngressRule(
+                                host="test1.local.int",
+                                http=client.ExtensionsV1beta1HTTPIngressRuleValue(
+                                    paths=[
+                                        client.ExtensionsV1beta1HTTPIngressPath(
+                                            path="/teste1",
+                                            backend=client.ExtensionsV1beta1IngressBackend(
+                                                service_name="service-teste1",
+                                                service_port=80
+                                            )
+                                        )
+                                    ]
+                                )
+                            )
+                        ]
+                    )
+                )
+            ]
+        )
+        service = client.V1Service(
+            metadata=client.V1ObjectMeta(
+                name="service-teste1",
+                namespace="teste1"
+            ),
+            spec=client.V1ServiceSpec(
+                cluster_ip="10.20.30.40",
+                ports=[
+                    client.V1ServicePort(
+                        name="http",
+                        port=80,
+                        target_port=80
+                    )
+                ],
+                selector={
+                    "app": "teste1"
+                }
+            )
+        )
+        endpoint = client.V1EndpointsList(
+            kind='EndpointsList',
+            items=[
+                client.V1Endpoints(
+                    metadata=client.V1ObjectMeta(
+                        name="service-teste1",
+                        namespace="teste1"
+                    ),
+                    subsets=None
+                )
+            ]
+        )
+        mock_extensions_api.return_value = mock.Mock(list_ingress_for_all_namespaces=lambda x=ingress_list: x)
+        mock_core_api.return_value = mock.Mock(read_namespaced_service=lambda name, namespace: service,
+                                               list_namespaced_endpoints=lambda namespace,
+                                                                                label_selector: endpoint)
+
+        i = scanner.get_pods_associated_with_ingress()
+        self.assertEqual(len(i), 0)
+
 
 if __name__ == '__main__':
     unittest.main()
