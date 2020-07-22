@@ -374,5 +374,32 @@ class TestListAllPods(unittest.TestCase):
         self.assertEqual(size, 2)
 
 
+def return_secret_obj(namespace, name, pass_key='.dockerconfigjson'):
+    secret1 = client.V1Secret(metadata=client.V1ObjectMeta(namespace=namespace,
+                                                           name=name),
+                              type='kubernetes.io/dockerconfigjson',
+                              data={
+                                  pass_key: 'eyJhdXRocyI6eyJmYWtlLnJlZ2lzdHJ5LmlvIjp7InVzZXJuYW1lIjoidGVz'
+                                            'dHVzZXIiLCJwYXNzd29yZCI6IjEyMzQ1NiIsImVtYWlsIjoidGVzdGVAdGVz'
+                                            'dGUuY29tIiwiYXV0aCI6ImRHVnpkSFZ6WlhJNk1USXpORFUyIn19fQ=='}
+                              )
+    return secret1
+
+
+class TestReadSecrets(unittest.TestCase):
+    @mock.patch('kubernetes.client.CoreV1Api')
+    def test_read_secret(self, mock_core_api):
+        mock_core_api.return_value = mock.Mock(read_namespaced_secret=lambda ns, n: return_secret_obj(ns, n))
+        s = scanner.read_secret("teste1", "registry")
+
+        self.assertEqual(s["username"], "testuser")
+        self.assertEqual(s["password"], "123456")
+
+    @mock.patch('kubernetes.client.CoreV1Api')
+    def test_error_read_secret(self, mock_core_api):
+        mock_core_api.return_value = mock.Mock(read_namespaced_secret=lambda ns, n: return_secret_obj(ns, n, "invalid"))
+        self.assertRaises(scanner.DockerConfigNotFound, scanner.read_secret, "teste1", "registry")
+
+
 if __name__ == '__main__':
     unittest.main()

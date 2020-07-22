@@ -57,9 +57,9 @@ def list_all_pods():
 
 def read_secret(namespace, secret):
     v1 = client.CoreV1Api()
-    secret = v1.read_namespaced_secret(secret, namespace)
+    secret_obj = v1.read_namespaced_secret(secret, namespace)
     try:
-        decoded_password = base64.b64decode(secret.data['.dockerconfigjson']).decode()
+        decoded_password = base64.b64decode(secret_obj.data['.dockerconfigjson']).decode()
     except KeyError:
         raise DockerConfigNotFound("Not found .dockerconfigjson key")
     load_auth_config = json.loads(decoded_password)
