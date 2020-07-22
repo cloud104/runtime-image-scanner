@@ -387,6 +387,9 @@ class VulnerabilityHandler(BaseHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         BaseHTTPRequestHandler.__init__(self, *args, **kwargs)
 
+    def log_message(self, fmt, *args):
+        return
+
     def do_GET(self):
         url = urlparse(self.path)
         if url.path == '/metrics':
