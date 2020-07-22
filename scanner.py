@@ -219,7 +219,7 @@ def get_pods_associated_with_ingress():
     extensions = client.ExtensionsV1beta1Api()
     v1 = client.CoreV1Api()
     ingresses = extensions.list_ingress_for_all_namespaces()
-
+    print(ingresses.items)
     # Poderia ser um list comprehension? Sim, mas ficaria tão dificil de ler...
     for ingress in ingresses.items:
         for rule in ingress.spec.rules:
