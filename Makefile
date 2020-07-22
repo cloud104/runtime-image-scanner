@@ -6,13 +6,18 @@ patch: build-patch git-push
 minor: build-minor git-push
 major: build-major git-push
 
-export LOG_LEVEL=critical
+export LOG_LEVEL=invalid
 
-test:
-	coverage run -m unittest discover
+test: unit-test test-reports badge
+
+unit-test:
+	coverage run -m unittest tests.py
 
 test-reports:
-	coverage html scanner.py
+	coverage html
+
+badge:
+	coverage-badge -fo coverage.svg
 
 build-dev:
 	docker build --network host -t $(CONTAINER_NAME):devel .

@@ -43,7 +43,7 @@ log_config = {
 try:
     logging.basicConfig(level=log_config[LOG_LEVEL], format=log_format)
 except KeyError:
-    logging.basicConfig(level=logging.INFO, format=log_format)
+    logging.basicConfig(level=logging.CRITICAL, format=log_format)
 
 
 class DockerConfigNotFound(Exception):

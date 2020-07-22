@@ -58,5 +58,8 @@ Todos os parâmetros desse scanner são ajustáveis via variáveis de ambiente.
 |NUM_THREADS|2|não|Número de threads disparadas para execução do trivy|
 
 ## Executando testes unitários
-
+Cobertura dos testes: ![](coverage.svg)
+```bash
+make tests
+```
 ## Imagem Docker
