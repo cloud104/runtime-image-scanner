@@ -340,6 +340,7 @@ class TestPromPoints(unittest.TestCase):
 
         self.assertTrue(has_container)
 
+
 class TestHTTPServer(unittest.TestCase):
     def test_http_ok(self):
         scanner.start_http_server(12345)
@@ -351,6 +352,27 @@ class TestHTTPServer(unittest.TestCase):
         self.assertFalse(r2.ok)
         r3 = requests.get("http://127.0.0.1:12345/")
         self.assertTrue(r3.ok)
+
+
+class TestListAllPods(unittest.TestCase):
+    @mock.patch('kubernetes.client.CoreV1Api')
+    def test_list_all_pods(self, mock_core_api):
+        pod1 = client.V1Pod(metadata=client.V1ObjectMeta(name="pod1", namespace="teste1"),
+                            spec=client.V1PodSpec(containers=[client.V1Container(name="test", image="teste:1")],
+                                                  init_containers=[client.V1Container(name="test",
+                                                                                      image="init_teste:1")])
+                            )
+        pod2 = client.V1Pod(metadata=client.V1ObjectMeta(name="pod2", namespace="teste2"),
+                            spec=client.V1PodSpec(containers=[client.V1Container(name="test", image="teste:2")],
+                                                  init_containers=[client.V1Container(name="test",
+                                                                                      image="init_teste:2")],
+                                                  image_pull_secrets=[client.V1LocalObjectReference(name="teste2")])
+                            )
+        mock_core_api.return_value = mock.Mock(list_pod_for_all_namespaces=lambda x=client.V1PodList(
+            items=[pod1, pod2]): x)
+        size = len(scanner.list_all_pods())
+        self.assertEqual(size, 2)
+
 
 if __name__ == '__main__':
     unittest.main()
