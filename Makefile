@@ -13,7 +13,7 @@ trivy:
 	wget https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz -O /tmp/trivy.tgz
 	tar -xvzf /tmp/trivy.tgz -C /tmp
 
-test: unit-test test-reports badge
+test: unit-test test-reports badge min-coverage
 
 unit-test:
 	coverage run -m unittest tests.py
@@ -23,6 +23,9 @@ test-reports:
 
 badge:
 	coverage-badge -fo coverage.svg
+
+min-coverage:
+	scripts/min_coverage.sh
 
 build-dev:
 	docker build --network host -t $(CONTAINER_NAME):devel .

@@ -1,5 +1,6 @@
 FROM python:3.8-slim as base
 
+# Run tests
 FROM base as tester
 COPY requirements-development.txt /
 RUN pip install -r /requirements-development.txt
@@ -11,8 +12,10 @@ COPY .coveragerc .
 COPY scanner.py .
 COPY version.py .
 COPY tests.py .
+COPY scripts/ /app/scripts
 RUN make test
 
+# If tests OK, download all deps and install download trivy
 FROM base as builder
 COPY requirements.txt /
 RUN apt-get update && apt-get install -y wget && apt-get clean autoclean && apt-get autoremove -y && rm -rf /var/lib/{apt,dpkg,cache,log}/
@@ -20,6 +23,7 @@ RUN pip install --user -r /requirements.txt && \
     wget https://github.com/aquasecurity/trivy/releases/download/v0.9.2/trivy_0.9.2_Linux-64bit.tar.gz -O /tmp/trivy.tgz && \
 	tar -xvzf /tmp/trivy.tgz -C /tmp
 
+# Clean image
 FROM base
 ENV PATH=/root/.local/bin:$PATH
 COPY --from=builder /root/.local /root/.local
