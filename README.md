@@ -62,4 +62,17 @@ Cobertura dos testes: ![](coverage.svg)
 ```bash
 make tests
 ```
-## Imagem Docker
+## Gerando uma nova versão
+
+O build de produção é feito no Google Build
+
+Criando uma nova tag, isso irá sensibilizar um novo build. (a trigger é `v.+`)
+
+O Makefile usa o utilitário `bumpversion` para criar as tags e fazer o push para o repo git.
+
+|Make Option|Action|
+|---|---|
+|patch|Gera uma versão patch (X.Y.**Z**).|
+|minor|Gera uma versão minor (X.**Y**.Z).|
+|major|Ger auma versão major (**X**.Y.Z).|
+|build-dev|Build local|

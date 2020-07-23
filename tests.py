@@ -345,6 +345,7 @@ class TestPromPoints(unittest.TestCase):
 
 class TestHTTPServer(unittest.TestCase):
     def test_http_ok(self):
+        scanner.SEC_REPORT_DIR = "./tests/sec_reports/01"
         scanner.start_http_server(12345)
         r = requests.get("http://127.0.0.1:12345/metrics")
         self.assertTrue(r.ok)
