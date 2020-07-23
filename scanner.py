@@ -392,15 +392,10 @@ class VulnerabilityHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         url = urlparse(self.path)
         if url.path == '/metrics':
-            try:
-                self.send_response(200)
-                self.send_header('Content-Type', CONTENT_TYPE_LATEST)
-                self.end_headers()
-                self.wfile.write(VUL_POINTS)
-            except BaseException:
-                self.send_response(500)
-                self.end_headers()
-                self.wfile.write(traceback.format_exc())
+            self.send_response(200)
+            self.send_header('Content-Type', CONTENT_TYPE_LATEST)
+            self.end_headers()
+            self.wfile.write(VUL_POINTS)
         elif url.path == '/':
             self.send_response(200)
             self.end_headers()
@@ -414,10 +409,11 @@ class VulnerabilityHandler(BaseHTTPRequestHandler):
             </html>""")
         elif url.path == '/report':
             try:
+                sec_report = read_sec_report()
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
-                self.wfile.write(read_sec_report())
+                self.wfile.write(sec_report)
             except FileNotFoundError:
                 self.send_response(404)
                 self.send_header('Content-Type', 'application/json')

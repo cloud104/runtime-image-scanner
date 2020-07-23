@@ -1,4 +1,5 @@
 import json
+import time
 import unittest
 import os
 import scanner
@@ -354,6 +355,13 @@ class TestHTTPServer(unittest.TestCase):
         r3 = requests.get("http://127.0.0.1:12345/")
         self.assertTrue(r3.ok)
 
+    @mock.patch('scanner.read_sec_report')
+    def test_http_nok(self, mock_sec_report):
+        mock_sec_report.side_effect = FileNotFoundError("test")
+        scanner.start_http_server(23456)
+        r1 = requests.get("http://127.0.0.1:23456/report")
+        self.assertEqual(r1.status_code, 404)
+
 
 class TestListAllPods(unittest.TestCase):
     @mock.patch('kubernetes.client.CoreV1Api')
@@ -480,8 +488,7 @@ class TestPodsAssociatedWithIngress(unittest.TestCase):
         )
         mock_extensions_api.return_value = mock.Mock(list_ingress_for_all_namespaces=lambda x=ingress_list: x)
         mock_core_api.return_value = mock.Mock(read_namespaced_service=lambda name, namespace: service,
-                                               list_namespaced_endpoints=lambda namespace,
-                                                                                label_selector: endpoint)
+                                               list_namespaced_endpoints=lambda namespace, label_selector: endpoint)
 
         i = scanner.get_pods_associated_with_ingress()
         self.assertEqual(len(i), 1)
@@ -551,8 +558,7 @@ class TestPodsAssociatedWithIngress(unittest.TestCase):
         )
         mock_extensions_api.return_value = mock.Mock(list_ingress_for_all_namespaces=lambda x=ingress_list: x)
         mock_core_api.return_value = mock.Mock(read_namespaced_service=lambda name, namespace: service,
-                                               list_namespaced_endpoints=lambda namespace,
-                                                                                label_selector: endpoint)
+                                               list_namespaced_endpoints=lambda namespace, label_selector: endpoint)
 
         i = scanner.get_pods_associated_with_ingress()
         self.assertEqual(len(i), 0)
