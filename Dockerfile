@@ -32,4 +32,4 @@ WORKDIR /app
 COPY scanner.py .
 COPY version.py .
 COPY --from=builder /tmp/trivy .
-CMD ["/app/scanner.py"]
+CMD ["/usr/local/bin/python", "/app/scanner.py"]
