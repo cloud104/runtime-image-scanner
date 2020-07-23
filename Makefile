@@ -1,12 +1,17 @@
 CONTAINER_NAME=runtime-image-scanner
 REGISTRY=$(CONTAINER_NAME)
 VERSION_FILE=version.py
+TRIVY_VERSION=0.9.2
 
 patch: build-patch git-push
 minor: build-minor git-push
 major: build-major git-push
 
 export LOG_LEVEL=invalid
+
+trivy:
+	wget https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz -O /tmp/trivy.tgz
+	tar -xvzf /tmp/trivy.tgz -C /tmp
 
 test: unit-test test-reports badge
 

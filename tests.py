@@ -288,6 +288,7 @@ class TestPromPoints(unittest.TestCase):
     @mock.patch('scanner.get_pods_associated_with_ingress')
     def test_prom_points_with_vulnerabilities(self, mock_public_ingress, mock_parse_pods):
         scanner.LOG_LEVEL = "fatal"
+        scanner.SEC_REPORT_DIR = "/tmp"
         mock_public_ingress.return_value = ["pod2"]
         mock_parse_pods.return_value = [
             {
