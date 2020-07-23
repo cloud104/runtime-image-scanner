@@ -42,6 +42,11 @@ O script lê o secret especificado e procura pela key `.dockerconfigjson`. Se n�
 scan para aquela imagem não acontece.
 Caso não encontre o secret, o scan daquela imagem também não acontece.
 
+## Métrica exportada para o Prometheus
+
+ Metric name| Metric type | Labels/tags  |
+| ---------- | ----------- | ----------- |
+|pod_security_issue|Gauge|`PodName`=&lt;pod-name&gt; <br> `Namespace`=&lt;pod-namespace&gt;<br> `Image`=&lt;Imagem docker com tag&gt;<br> `IsPublic`=&lt;Está esposta no ingress?&gt;<br> `BaseOS`=&lt;SO Base da imagem&gt;<br> `VulnerabilityID`=&lt;CVE ID&gt;<br> `PkgName`=&lt;Nome do pacote vulnerável&gt;<br> `InstalledVersion`=&lt;Versão do pacote vulnerável&gt;<br> `FixedVersion`=&lt;Versão do pacote corrigida&gt;<br> `Severity`=&lt;Severidade do CVE&gt;|
 
 ## Variáveis de ambiente
 Todos os parâmetros desse scanner são ajustáveis via variáveis de ambiente.
