@@ -27,9 +27,10 @@ RUN pip install --user -r /requirements.txt && \
 FROM base
 ENV PATH=/root/.local/bin:$PATH
 COPY --from=builder /root/.local /root/.local
-RUN apt-get update && apt-get install -y rpm && apt-get clean autoclean && apt-get autoremove -y && rm -rf /var/lib/{apt,dpkg,cache,log}/
+RUN apt-get update && apt-get install -y rpm && apt-get clean autoclean && apt-get autoremove -y && rm -rf /var/lib/{apt,dpkg,cache,log}/ && mkdir -p /data/trivycache
 WORKDIR /app
 COPY scanner.py .
 COPY version.py .
 COPY --from=builder /tmp/trivy .
+ENV TRIVY_CACHE_DIR /data/trivycache
 CMD ["/usr/local/bin/python", "/app/scanner.py"]

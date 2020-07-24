@@ -8,15 +8,15 @@ import subprocess
 import sys
 import threading
 import time
-import traceback
 from http.server import BaseHTTPRequestHandler
 from http.server import HTTPServer
 from socketserver import ThreadingMixIn
 from urllib.parse import urlparse
-from version import VERSION
 
 from kubernetes import client, config
 from prometheus_client import Gauge, generate_latest, CollectorRegistry, CONTENT_TYPE_LATEST
+
+from version import VERSION
 
 QUEUE = queue.Queue()
 VUL_LIST = dict()
@@ -51,11 +51,13 @@ class DockerConfigNotFound(Exception):
 
 
 def list_all_pods():
+    log.debug("list all pods")
     v1 = client.CoreV1Api()
     return v1.list_pod_for_all_namespaces().items
 
 
 def read_secret(namespace, secret):
+    log.debug("read secret")
     v1 = client.CoreV1Api()
     secret_obj = v1.read_namespaced_secret(secret, namespace)
     try:
@@ -64,12 +66,14 @@ def read_secret(namespace, secret):
         raise DockerConfigNotFound("Not found .dockerconfigjson key")
     load_auth_config = json.loads(decoded_password)
     registry_addr = list(load_auth_config['auths'].keys())[0]
+    log.debug("end read secret")
     return {"username": load_auth_config['auths'][registry_addr]['username'],
             "password": load_auth_config['auths'][registry_addr]['password']
             }
 
 
 def parse_pods():
+    log.debug("parse pods")
     parsed_pod = list()
     pods = list_all_pods()
     for pod in pods:
@@ -98,11 +102,12 @@ def parse_pods():
                     log.info("The Secret {} don't have .dockerconfigjson key.".format(secret.name))
                 except KeyError:
                     log.info("Invalid docker auth on secret {}".format(secret.name))
-
+    log.debug("end parse pods")
     return parsed_pod
 
 
 def unique_images():
+    log.debug("unique images")
     pods = parse_pods()
 
     images = dict()
@@ -118,22 +123,27 @@ def unique_images():
                     images[image] = {"docker_password": []}
                 else:
                     images[image] = {"docker_password": pod[pod_id[0]]['docker_password']}
+    log.debug("end unique images")
     return images
 
 
 def enqueue():
+    log.debug("enqueue")
     images = unique_images()
     for image in images:
+        log.debug("enqueue: {}".format({image: images[image]}))
         QUEUE.put({image: images[image]})
 
 
 def parse_scan(image):
+    log.debug("parse scan")
     with open("{}/{}.json".format(TRIVY_REPORT_DIR, image), "r") as f:
         try:
             vul_list = json.loads(f.read())
         except json.decoder.JSONDecodeError:
             log.error("Error decoding trivy output scan: {}".format(image))
             return {}
+    log.debug("end parse scan")
     return vul_list
 
 
@@ -141,21 +151,18 @@ class Scan:
     RUNNING = True
 
     def trivy(self):
-        while self.RUNNING:
+        log.debug("trivy scan")
+        while self.RUNNING and not QUEUE.empty():
             item = QUEUE.get()
             image = list(item.keys())[0]
             safe_image = image.replace("/", "__")
             log.info("Scanning image: {}".format(image))
-            cmd_clear_cache = ["{}".format(TRIVY_BIN_PATH),
-                               "image",
-                               "-c",
-                               "{}".format(image)]
-            cmd = ["{}".format(TRIVY_BIN_PATH),
-                   "image",
-                   "--format=json",
-                   "--ignore-unfixed=true",
-                   "--output={}/{}.json".format(TRIVY_REPORT_DIR, safe_image),
-                   "{}".format(image)]
+            system_environment = os.environ.copy()
+            cmd_clear_cache = ["{} image -c {}".format(TRIVY_BIN_PATH, image)]
+            cmd = ["{} image --format=json --ignore-unfixed=true --output={}/{}.json {}".format(TRIVY_BIN_PATH,
+                                                                                                TRIVY_REPORT_DIR,
+                                                                                                safe_image,
+                                                                                                image)]
 
             if "quay.io" in image and DISABLE_QUAYIO_SCAN == "yes":
                 log.warning("The image {} was not scanned because hosted image is in quay.io registry.".format(image))
@@ -167,14 +174,16 @@ class Scan:
                     "pull",
                     image
                 ]
-                docker_pull = subprocess.Popen(docker_pull_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                docker_pull = subprocess.Popen(docker_pull_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                               env=system_environment)
                 docker_pull.wait()
                 log.debug("Docker pull stdout: {}".format(docker_pull.stdout.read().decode()))
                 log.debug("Docker pull stderr: {}".format(docker_pull.stderr.read().decode()))
                 log.debug("Docker pull status code: {}".format(docker_pull.returncode))
 
-            log.debug(cmd)
-            trivy_clear_cache = subprocess.Popen(cmd_clear_cache, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            log.debug("Trivy clear cache cmd: {}".format(cmd_clear_cache))
+            trivy_clear_cache = subprocess.Popen(cmd_clear_cache, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                                 shell=True, env=system_environment)
             log.debug("STDOUT Clean Cache: {}".format(trivy_clear_cache.stdout.read().decode()))
             log.debug("STDERR Clean Cache: {}".format(trivy_clear_cache.stderr.read().decode()))
             log.debug("STATUS CODE Clean Cache {}".format(trivy_clear_cache.returncode))
@@ -182,21 +191,24 @@ class Scan:
 
             if len(item[image]['docker_password']) > 0:
                 log.info("Auth on registry...")
-                env = {"TRIVY_USERNAME": item[image]['docker_password'][0]['username'],
-                       "TRIVY_PASSWORD": item[image]['docker_password'][0]['password']}
-            else:
-                env = {}
+                system_environment["TRIVY_USERNAME"] = item[image]['docker_password'][0]['username']
+                system_environment["TRIVY_PASSWORD"] = item[image]['docker_password'][0]['password']
+
+            log.debug("Trivy scan cmd: {}".format(cmd))
             trivy_scan = subprocess.Popen(cmd,
                                           stdout=subprocess.PIPE,
                                           stderr=subprocess.PIPE,
-                                          env=env)
+                                          env=system_environment,
+                                          shell=True)
             trivy_scan.wait()
             log.debug("STDOUT: {}".format(trivy_scan.stdout.read().decode()))
             log.debug("STDERR: {}".format(trivy_scan.stderr.read().decode()))
             log.debug("STATUS CODE: {}".format(trivy_scan.returncode))
             log.debug("Parse scan: {}".format(parse_scan(safe_image)))
             VUL_LIST[image] = parse_scan(safe_image)
+            log.debug(VUL_LIST)
             QUEUE.task_done()
+            log.debug("passou o task_done")
 
 
 def convert_label_selector(label):
@@ -215,6 +227,7 @@ def convert_label_selector(label):
 
 
 def get_pods_associated_with_ingress():
+    log.debug("get pods associated with ingress")
     pods = list()
     extensions = client.ExtensionsV1beta1Api()
     v1 = client.CoreV1Api()
@@ -241,6 +254,7 @@ def get_pods_associated_with_ingress():
 
 
 def create_prom_points():
+    log.debug("create prom proints")
     registry = CollectorRegistry()
     to_sec = list()
     vulnerability_gauge = Gauge("pod_security_issue", "CVE found in all images associated with pod",
@@ -349,6 +363,7 @@ def create_prom_points():
                 write_sec_report(to_sec)
             except KeyError:
                 log.warning("The container {} was not scanned. Wait until next round...".format(container))
+    log.debug("finished create prom points")
     return generate_latest(registry)
 
 
@@ -358,11 +373,10 @@ def write_sec_report(report):
 
 
 def start_threads():
+    log.debug("start threads")
     enqueue()
     scan = Scan()
-    for _ in range(0, NUM_THREADS):
-        threading.Thread(target=scan.trivy, daemon=True).start()
-    QUEUE.join()
+    scan.trivy()
 
 
 def main():
@@ -441,14 +455,17 @@ def start_http_server(port):
 
 
 def cleanup():
+    log.debug("Executing CleanUP")
     global VUL_LIST
     VUL_LIST = dict()
     if os.path.exists(TRIVY_REPORT_DIR):
         for f in glob.glob("{}/*.json".format(TRIVY_REPORT_DIR)):
+            log.debug("removing file: {}/{}".format(TRIVY_REPORT_DIR, f))
             os.remove(f)
 
 
 def setup():
+    log.debug("Executing Setup step")
     if not os.path.exists(SEC_REPORT_DIR):
         os.makedirs(SEC_REPORT_DIR)
 
@@ -457,6 +474,14 @@ def setup():
 
     if not os.path.exists(TRIVY_BIN_PATH):
         raise FileNotFoundError("Trivy binary not found at: {}".format(TRIVY_BIN_PATH))
+    cmd_download_db = ["{} image --download-db-only".format(TRIVY_BIN_PATH)]
+    log.debug("Trivy Download db cmd: {}".format(cmd_download_db))
+    system_environment = os.environ.copy()
+    trivy_clear_cache = subprocess.Popen(cmd_download_db, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True,
+                                         env=system_environment)
+    log.debug("Trivy Download db returncode: {}".format(trivy_clear_cache.returncode))
+    log.debug("Trivy Download db stdout {}".format(trivy_clear_cache.stdout.read().decode()))
+    log.debug("Trivy Download db stderr {}".format(trivy_clear_cache.stderr.read().decode()))
 
 
 if __name__ == '__main__':

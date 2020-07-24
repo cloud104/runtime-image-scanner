@@ -13,10 +13,14 @@ class TestSetup(unittest.TestCase):
         os.rmdir("/tmp/trivyreporttest1")
         os.rmdir("/tmp/secreportdirtest1")
 
-    def test_setup_dirs(self):
+    @mock.patch('subprocess.Popen')
+    def test_setup_dirs(self, mock_popen):
         scanner.TRIVY_BIN_PATH = "/bin/bash"
         scanner.TRIVY_REPORT_DIR = "/tmp/trivyreporttest1"
         scanner.SEC_REPORT_DIR = "/tmp/secreportdirtest1"
+        stdout = mock.Mock(read=lambda x=b"Stdout - Just a test": x)
+        stderr = mock.Mock(read=lambda x=b"Stderr - Just a test": x)
+        mock_popen.return_value = mock.Mock(returncode=0, stdout=stdout, stderr=stderr)
         s = scanner.setup()
         self.assertIsNone(s)
         scanner.TRIVY_BIN_PATH = "/tmp/fake"
