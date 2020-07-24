@@ -70,7 +70,7 @@ def read_secret(namespace, secret):
     log.debug("end read secret")
     return {"username": load_auth_config['auths'][registry_addr]['username'],
             "password": load_auth_config['auths'][registry_addr]['password'],
-            "registry_url": registry_addr
+            "registry_url": registry_addr.replace("https://", "").replace("http://", "")
             }
 
 
@@ -192,9 +192,10 @@ class Scan:
             trivy_clear_cache.wait()
 
             if len(item[image]['docker_password']) > 0:
-                log.info("Auth on registry {}".format(item[image]['docker_password'][0]['registry_url']))
-                system_environment["TRIVY_USERNAME"] = item[image]['docker_password'][0]['username']
-                system_environment["TRIVY_PASSWORD"] = item[image]['docker_password'][0]['password']
+                if item[image]['docker_password'][0]['registry_url'] in image:
+                    log.info("Auth on registry {}".format(item[image]['docker_password'][0]['registry_url']))
+                    system_environment["TRIVY_USERNAME"] = item[image]['docker_password'][0]['username']
+                    system_environment["TRIVY_PASSWORD"] = item[image]['docker_password'][0]['password']
 
             log.debug("Trivy scan cmd: {}".format(cmd))
             trivy_scan = subprocess.Popen(cmd,
