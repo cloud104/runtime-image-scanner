@@ -21,12 +21,15 @@ spec:
         app: image-scanner
     spec:
       containers:
-      - image: gcr.io/totvs-kubernetes-service/runtime-image-scanner:v0.0.1
+      - image: gcr.io/totvs-kubernetes-service/runtime-image-scanner:v0.0.3
         imagePullPolicy: IfNotPresent
         name: runtime-image-scanner
         resources: {}
         terminationMessagePath: /dev/termination-log
         terminationMessagePolicy: File
+        env:
+          - name: DISABLE_QUAYIO_SCAN
+            value: "yes"
       dnsPolicy: ClusterFirst
       imagePullSecrets:
       - name: registry
