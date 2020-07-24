@@ -192,10 +192,9 @@ class Scan:
             trivy_clear_cache.wait()
 
             if len(item[image]['docker_password']) > 0:
-                if item[image]['docker_password'][0]['registry_url'] in image:
-                    log.info("Auth on registry {}".format(item[image]['docker_password'][0]['registry_url']))
-                    system_environment["TRIVY_USERNAME"] = item[image]['docker_password'][0]['username']
-                    system_environment["TRIVY_PASSWORD"] = item[image]['docker_password'][0]['password']
+                log.info("Auth on registry {}".format(item[image]['docker_password'][0]['registry_url']))
+                system_environment["TRIVY_USERNAME"] = item[image]['docker_password'][0]['username']
+                system_environment["TRIVY_PASSWORD"] = item[image]['docker_password'][0]['password']
 
             log.debug("Trivy scan cmd: {}".format(cmd))
             trivy_scan = subprocess.Popen(cmd,
