@@ -245,7 +245,8 @@ class TestScan(unittest.TestCase):
     def test_auth_registry(self, mock_unique_images, mock_popen):
         sentinel = mock.PropertyMock(side_effect=[True, False])
         mock_unique_images.return_value = {"quay.io/test/fake:1": {"docker_password": [{"username": "fake",
-                                                                                        "password": "fakepass"}]}}
+                                                                                        "password": "fakepass",
+                                                                                        "registry_url": "fake.io"}]}}
         scanner.NUM_THREADS = 1
         scanner.DISABLE_QUAYIO_SCAN = "no"
         scanner.enqueue()

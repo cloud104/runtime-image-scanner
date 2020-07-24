@@ -1,4 +1,5 @@
 import base64
+import datetime
 import glob
 import json
 import logging
@@ -68,7 +69,8 @@ def read_secret(namespace, secret):
     registry_addr = list(load_auth_config['auths'].keys())[0]
     log.debug("end read secret")
     return {"username": load_auth_config['auths'][registry_addr]['username'],
-            "password": load_auth_config['auths'][registry_addr]['password']
+            "password": load_auth_config['auths'][registry_addr]['password'],
+            "registry_url": registry_addr
             }
 
 
@@ -190,9 +192,10 @@ class Scan:
             trivy_clear_cache.wait()
 
             if len(item[image]['docker_password']) > 0:
-                log.info("Auth on registry...")
-                system_environment["TRIVY_USERNAME"] = item[image]['docker_password'][0]['username']
-                system_environment["TRIVY_PASSWORD"] = item[image]['docker_password'][0]['password']
+                if image in item[image]['docker_password'][0]['registry_url']:
+                    log.info("Auth on registry {}".format(item[image]['docker_password'][0]['registry_url']))
+                    system_environment["TRIVY_USERNAME"] = item[image]['docker_password'][0]['username']
+                    system_environment["TRIVY_PASSWORD"] = item[image]['docker_password'][0]['password']
 
             log.debug("Trivy scan cmd: {}".format(cmd))
             trivy_scan = subprocess.Popen(cmd,
@@ -368,8 +371,12 @@ def create_prom_points():
 
 
 def write_sec_report(report):
+    r = {
+        "last_version": str(datetime.datetime.now()),
+        "vul_list": report
+    }
     with open("{}/sec_report.json".format(SEC_REPORT_DIR), 'w') as f:
-        f.write(json.dumps(report))
+        f.write(json.dumps(r))
 
 
 def start_threads():
