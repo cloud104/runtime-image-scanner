@@ -3,7 +3,7 @@ steps:
   args: ['build', '-t', 'gcr.io/totvs-kubernetes-service/runtime-image-scanner:$TAG_NAME', '.']
   id: 'build-and-test'
 
-- name: 'gcr.io/totvs-kubernetes-service/helm-push:v1.0.0'
+- name: 'gcr.io/totvs-kubernetes-service/helm-push:v1.0.1'
   args: ['helm push chart/runtime-image-scanner tks']
   id: 'helm push'
 
