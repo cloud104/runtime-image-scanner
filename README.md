@@ -60,7 +60,6 @@ Todos os parâmetros desse scanner são ajustáveis via variáveis de ambiente.
 |HTTP_PORT|8080|não|Porta onde o endpoint irá ouvir|
 |TRIVY_BIN_PATH|./trivy|não|Path do binário do trivy|
 |DISABLE_QUAYIO_SCAN|no|não|Desativa scans para imagens vindas do repositório quay.io|
-|NUM_THREADS|2|não|Número de threads disparadas para execução do trivy|
 
 ## Executando testes unitários
 Cobertura dos testes: ![](coverage.svg)

@@ -1,0 +1,62 @@
+image:
+  repository: gcr.io/totvs-kubernetes-service/runtime-image-scanner
+  tag: v0.0.6
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: image-scanner-registry
+
+Envs:
+  - name: LOG_LEVEL
+    value: info
+  - name: SEC_REPORT_DIR
+    value: /output/secreport
+  - name: TRIVY_REPORT_DIR
+    value: /output/trivyreports
+  - name: SCAN_INTERVAL
+    value: "43200"
+  - name: HTTP_PORT
+    value: "8080"
+  - name: DISABLE_QUAYIO_SCAN
+    value: "yes"
+
+serviceAccount:
+  create: true
+  name: image-scanner
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: true
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: chart-example.local
+      paths:
+        - /
+
+volume:
+  create: true
+  size: 1Gi
+  mountPath: /output
+
+monitoring:
+  serviceMonitor:
+    enable: true
+
+resources:
+  limits:
+   cpu: 2
+   memory: 1Gi
+  requests:
+   cpu: 50m
+   memory: 128Mi
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
