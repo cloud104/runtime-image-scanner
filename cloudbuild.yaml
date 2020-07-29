@@ -5,8 +5,14 @@ steps:
 
 - name: 'gcr.io/totvs-kubernetes-service/helm-push:v1.0.1'
   args: ['helm push chart/runtime-image-scanner tks']
+  secretEnv: ['HELM_REPO_PASSWORD']
   id: 'helm push'
 
 - name: 'gcr.io/cloud-builders/docker'
   args: ['push', 'gcr.io/totvs-kubernetes-service/runtime-image-scanner:$TAG_NAME']
   id: 'push'
+
+ secrets:
+ - kmsKeyName: projects/totvs-kubernetes-service/locations/global/keyRings/chartmuseum/cryptoKeys/HELM_REPO_PASSWORD
+   secretEnv:
+     HELM_REPO_PASSWORD: 'CiQAMxdOcnfMUD7GdP0ZCDs3rthNUJb7oRXhEBkG/RqNlNJK96MSOQBXufE0qjnedohliQUPZPMXf49tMe6JQBhNbIrMmEgiTUWmIs1Xjs91MMU1qlDH6zkSAul4xkpa7A=='
