@@ -10,6 +10,7 @@ spec:
     - port: {{ .Values.service.port }}
       targetPort: {{ .Values.service.port }}
       protocol: TCP
+      name: http
   selector:
       app.kubernetes.io/name: {{ include "runtime-image-scanner.name" . }}
       app.kubernetes.io/instance: {{ .Release.Name }}
