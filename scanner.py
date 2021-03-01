@@ -491,21 +491,15 @@ if __name__ == '__main__':
         log.error(e)
         sys.exit(1)
     start_http_server(int(HTTP_SERVER_PORT))
-    # while True:
-    #     try:
-    #         main()
-    #         cleanup()
-    #         log.info("Sleeping for {}s".format(SCAN_INTERVAL))
-    #         time.sleep(int(SCAN_INTERVAL))
-    #     except KeyboardInterrupt:
-    #         log.info("Bye...")
-    #         break
-    #     except BaseException as e:
-    #         log.error(e)
-
-    main()
-    cleanup()
-    # config.load_kube_config()
-    # print(parse_pods(get_docker_auth=False))
-    # print(read_secret("novas-solucoes-totvs-sign", "robot-pull-docker-totvs-io"))
-    # print(get_pods_associated_with_ingress())
+    while True:
+        try:
+            main()
+            cleanup()
+            log.info("Sleeping for {}s".format(SCAN_INTERVAL))
+            time.sleep(int(SCAN_INTERVAL))
+        except KeyboardInterrupt:
+            log.info("Bye...")
+            break
+        except BaseException as e:
+            log.error(e)
+            time.sleep(int(SCAN_INTERVAL))
