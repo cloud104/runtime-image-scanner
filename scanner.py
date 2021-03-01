@@ -1,5 +1,4 @@
 import base64
-import datetime
 import glob
 import json
 import logging
@@ -24,15 +23,12 @@ QUEUE = queue.Queue()
 VUL_LIST = dict()
 VUL_POINTS = bytes()
 LOG_LEVEL = os.getenv("LOG_LEVEL", "info").replace(" ", "").lower()
-SEC_REPORT_DIR = os.getenv("SEC_REPORT_DIR", "/tmp/secreport")
 TRIVY_REPORT_DIR = os.getenv("TRIVY_REPORT_DIR", "/tmp/trivyreport")
 SCAN_INTERVAL = os.getenv("SCAN_INTERVAL", "120")
 HTTP_SERVER_PORT = os.getenv("HTTP_PORT", "8080")
 TRIVY_BIN_PATH = os.getenv("TRIVY_BIN_PATH", "./trivy")
-DISABLE_QUAYIO_SCAN = os.getenv("DISABLE_QUAYIO_SCAN", "no")
-NUM_THREADS = os.getenv("NUM_THREADS", 2)
 log = logging.getLogger(__name__)
-log_format = '%(asctime)s - [%(levelname)s] [%(threadName)s] - %(message)s'
+log_format = '%(asctime)s - [%(levelname)s] [%(threadName)s] [%(funcName)s:%(lineno)d]- %(message)s'
 
 log_config = {
     "debug": logging.DEBUG,
@@ -63,7 +59,7 @@ def list_all_pods():
 
 
 def read_secret(namespace, secret):
-    log.debug("read secret")
+    log.debug("read secret: {}/{}".format(namespace, secret))
     v1 = client.CoreV1Api()
     try:
         secret_obj = v1.read_namespaced_secret(secret, namespace)
@@ -127,7 +123,11 @@ def parse_pods():
                     log.info("Error reading secret found on pod. The error returned by "
                              "kubernetes api was: {}".format(err))
                 except KeyError:
-                    log.info("POD: {} | Namespace: {} | Invalid docker auth on secret {}".format(pod.metadata.name, pod.metadata.namespace, secret.name))
+                    log.info("POD: {} | "
+                             "Namespace: {} | "
+                             "Invalid docker auth on secret {}".format(pod.metadata.name,
+                                                                       pod.metadata.namespace,
+                                                                       secret.name))
     log.debug("end parse pods")
     return parsed_pod
 
@@ -190,23 +190,6 @@ class Scan:
                                                                                                 safe_image,
                                                                                                 image)]
 
-            if "quay.io" in image and DISABLE_QUAYIO_SCAN == "yes":
-                log.warning("The image {} was not scanned because hosted image is in quay.io registry.".format(image))
-                continue
-
-            if "quay.io" in image:
-                docker_pull_cmd = [
-                    "docker",
-                    "pull",
-                    image
-                ]
-                docker_pull = subprocess.Popen(docker_pull_cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                               env=system_environment)
-                docker_pull.wait()
-                log.debug("Docker pull stdout: {}".format(docker_pull.stdout.read().decode()))
-                log.debug("Docker pull stderr: {}".format(docker_pull.stderr.read().decode()))
-                log.debug("Docker pull status code: {}".format(docker_pull.returncode))
-
             log.debug("Trivy clear cache cmd: {}".format(cmd_clear_cache))
             trivy_clear_cache = subprocess.Popen(cmd_clear_cache, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                                  shell=True, env=system_environment)
@@ -215,8 +198,12 @@ class Scan:
             log.debug("STATUS CODE Clean Cache {}".format(trivy_clear_cache.returncode))
             trivy_clear_cache.wait()
 
+            log.debug("Image: {} password len: {}".format(image, len(item[image]['docker_password'])))
+            log.debug("Image {} password content: {}".format(image, item[image]['docker_password']))
+
             if len(item[image]['docker_password']) > 0:
-                if item[image]['docker_password'][0]['registry_url'] in image:
+                log.debug("Image {} has password".format(image))
+                if image.split('/')[0] in item[image]['docker_password'][0]['registry_url']:
                     log.info("Auth on registry {}".format(item[image]['docker_password'][0]['registry_url']))
                     system_environment["TRIVY_USERNAME"] = item[image]['docker_password'][0]['username']
                     system_environment["TRIVY_PASSWORD"] = item[image]['docker_password'][0]['password']
@@ -382,28 +369,10 @@ def create_prom_points():
                     "NA",
                     "NA"
                 ).set(0)
-                info_to_sec = {
-                    "docker_image": container,
-                    "pod": p,
-                    "is_public": p in public_pods,
-                    "namespace": pod[p]['namespace'],
-                    "vulnerabilities": None
-                }
-                to_sec.append(info_to_sec)
-                write_sec_report(to_sec)
             except KeyError:
                 log.warning("The container {} was not scanned. Wait until next round...".format(container))
     log.debug("finished create prom points")
     return generate_latest(registry)
-
-
-def write_sec_report(report):
-    r = {
-        "last_version": str(datetime.datetime.now()),
-        "vul_list": report
-    }
-    with open("{}/sec_report.json".format(SEC_REPORT_DIR), 'w') as f:
-        f.write(json.dumps(r))
 
 
 def start_threads():
@@ -420,7 +389,7 @@ def main():
     else:
         log.debug("using kube config")
         config.load_kube_config()
-
+    client.rest.logger.setLevel(logging.WARNING)
     start_threads()
     global VUL_POINTS
     VUL_POINTS = create_prom_points()
@@ -455,27 +424,9 @@ class VulnerabilityHandler(BaseHTTPRequestHandler):
             <p>You can get a full report here: <code>/report</code></p>
             </body>
             </html>""")
-        elif url.path == '/report':
-            try:
-                sec_report = read_sec_report()
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(sec_report)
-            except FileNotFoundError:
-                self.send_response(404)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps(
-                    {"message": "Report is not available yet. Please come back in fell minutes."}).encode())
         else:
             self.send_response(404)
             self.end_headers()
-
-
-def read_sec_report():
-    with open("{}/sec_report.json".format(SEC_REPORT_DIR), 'r') as f:
-        return f.read().encode()
 
 
 def http_server_handler(*args, **kwargs):
@@ -500,9 +451,6 @@ def cleanup():
 
 def setup():
     log.debug("Executing Setup step")
-    if not os.path.exists(SEC_REPORT_DIR):
-        os.makedirs(SEC_REPORT_DIR)
-
     if not os.path.exists(TRIVY_REPORT_DIR):
         os.makedirs(TRIVY_REPORT_DIR)
 

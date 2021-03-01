@@ -54,12 +54,10 @@ Todos os parâmetros desse scanner são ajustáveis via variáveis de ambiente.
 |Variável|Valor Padrão|Obrigatória|Descrição|
 |---|---|---|---|
 |LOG_LEVEL|info|não|Nível de log da app. Valores suportados: info, warning, debug, fatal, critical.|
-|SEC_REPORT_DIR|/tmp/secreport|não|Local onde o arquivo .json com o resultado de todos os scans serão gravados|
 |TRIVY_REPORT_DIR|/tmp/trivyreport|não|Local temporário onde os reports do trivy serão gravados|
 |SCAN_INTERVAL|43200|não|Tempo em segundos do intervalo de execução|
 |HTTP_PORT|8080|não|Porta onde o endpoint irá ouvir|
 |TRIVY_BIN_PATH|./trivy|não|Path do binário do trivy|
-|DISABLE_QUAYIO_SCAN|no|não|Desativa scans para imagens vindas do repositório quay.io|
 
 ## Executando testes unitários
 Cobertura dos testes: ![](coverage.svg)
