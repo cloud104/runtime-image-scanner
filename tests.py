@@ -11,7 +11,6 @@ import requests
 class TestSetup(unittest.TestCase):
     def tearDown(self) -> None:
         os.rmdir("/tmp/trivyreporttest1")
-        os.rmdir("/tmp/secreportdirtest1")
 
     @mock.patch('subprocess.Popen')
     def test_setup_dirs(self, mock_popen):

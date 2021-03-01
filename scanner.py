@@ -91,7 +91,7 @@ def read_secret(namespace, secret):
     return auth
 
 
-def parse_pods():
+def parse_pods(get_docker_auth=True):
     log.debug("parse pods")
     parsed_pod = list()
     pods = list_all_pods()
@@ -115,8 +115,9 @@ def parse_pods():
         if pod.spec.image_pull_secrets is not None:
             for secret in pod.spec.image_pull_secrets:
                 try:
-                    a[pod.metadata.name]['docker_password'] \
-                        .append(read_secret(pod.metadata.namespace, secret.name))
+                    if get_docker_auth:
+                        a[pod.metadata.name]['docker_password'] \
+                            .append(read_secret(pod.metadata.namespace, secret.name))
                 except DockerConfigNotFound:
                     log.info("The Secret {} don't have .dockerconfigjson key.".format(secret.name))
                 except KApiException as err:
@@ -218,9 +219,9 @@ class Scan:
             log.debug("STDOUT: {}".format(trivy_scan.stdout.read().decode()))
             log.debug("STDERR: {}".format(trivy_scan.stderr.read().decode()))
             log.debug("STATUS CODE: {}".format(trivy_scan.returncode))
-            log.debug("Parse scan: {}".format(parse_scan(safe_image)))
+            # log.debug("Parse scan: {}".format(parse_scan(safe_image)))
             VUL_LIST[image] = parse_scan(safe_image)
-            log.debug(VUL_LIST)
+            # log.debug(VUL_LIST)
             QUEUE.task_done()
             log.debug("passou o task_done")
 
@@ -253,17 +254,37 @@ def get_pods_associated_with_ingress():
                 log.warning("Ingress: {} Rule: is None".format(rule.host))
                 continue
             for path in rule.http.paths:
-                service = v1.read_namespaced_service(name=path.backend.service_name,
-                                                     namespace=ingress.metadata.namespace)
-                endpoint = v1.list_namespaced_endpoints(namespace=ingress.metadata.namespace,
-                                                        label_selector=convert_label_selector(service.spec.selector))
+                try:
+                    service = v1.read_namespaced_service(name=path.backend.service_name,
+                                                         namespace=ingress.metadata.namespace)
+                except ApiException as err:
+                    log.error("Ingress: {}, error getting service: {}".format(rule.host, err))
+                    continue
+                try:
+                    endpoint = v1.list_namespaced_endpoints(namespace=ingress.metadata.namespace,
+                                                            label_selector=convert_label_selector(
+                                                                service.spec.selector))
+                except ApiException as err:
+                    log.error("Ingress: {}, error getting endpoints. ".format(rule.host, err))
+                    continue
                 for ep in endpoint.items:
                     if ep.subsets is None:
                         log.warning("The endpoint of service {} comes empty. Skipping verification".format(
                             path.backend.service_name))
                         continue
                     for subset in ep.subsets:
+                        if subset.addresses is None:
+                            log.error("The endpoint subset of service {} has no address. Skipping verification".format(
+                                path.backend.service_name
+                            ))
+                            continue
                         for address in subset.addresses:
+                            if address.target_ref is None:
+                                log.error(
+                                    "The target ref of address {} is none. Skipping verification".format(
+                                        subset.addresses
+                                    ))
+                                continue
                             if address.target_ref.name not in pods:
                                 pods.append(address.target_ref.name)
     log.debug("Pods associated with ingress: {}".format(pods))
@@ -273,7 +294,6 @@ def get_pods_associated_with_ingress():
 def create_prom_points():
     log.debug("create prom points")
     registry = CollectorRegistry()
-    to_sec = list()
     vulnerability_gauge = Gauge("pod_security_issue", "CVE found in all images associated with pod",
                                 ["PodName",
                                  "Namespace",
@@ -285,20 +305,12 @@ def create_prom_points():
                                  "InstalledVersion",
                                  "FixedVersion",
                                  "Severity"], registry=registry)
-    pods = parse_pods()
+    pods = parse_pods(get_docker_auth=False)
     public_pods = get_pods_associated_with_ingress()
     for pod in pods:
         p = list(pod.keys())[0]
         for container in pod[p]['containers']:
             try:
-                info_to_sec = {
-                    "docker_image": container,
-                    "pod": p,
-                    "is_public": p in public_pods,
-                    "namespace": pod[p]['namespace'],
-                    "vulnerabilities": VUL_LIST[container]
-                }
-                to_sec.append(info_to_sec)
                 for t in VUL_LIST[container]:
                     for v in t["Vulnerabilities"]:
                         log.info("Prom point pod: {}".format(p))
@@ -379,7 +391,12 @@ def start_threads():
     log.debug("start threads")
     enqueue()
     scan = Scan()
-    scan.trivy()
+    t1 = threading.Thread(target=scan.trivy)
+    t2 = threading.Thread(target=scan.trivy)
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
 
 
 def main():
@@ -445,7 +462,7 @@ def cleanup():
     VUL_LIST = dict()
     if os.path.exists(TRIVY_REPORT_DIR):
         for f in glob.glob("{}/*.json".format(TRIVY_REPORT_DIR)):
-            log.debug("removing file: {}/{}".format(TRIVY_REPORT_DIR, f))
+            log.debug("removing file: {}".format(f))
             os.remove(f)
 
 
@@ -489,5 +506,6 @@ if __name__ == '__main__':
     main()
     cleanup()
     # config.load_kube_config()
-    # print(parse_pods())
+    # print(parse_pods(get_docker_auth=False))
     # print(read_secret("novas-solucoes-totvs-sign", "robot-pull-docker-totvs-io"))
+    # print(get_pods_associated_with_ingress())

@@ -9,16 +9,12 @@ imagePullSecrets:
 Envs:
   - name: LOG_LEVEL
     value: info
-  - name: SEC_REPORT_DIR
-    value: /output/secreport
   - name: TRIVY_REPORT_DIR
     value: /output/trivyreports
   - name: SCAN_INTERVAL
     value: "43200"
   - name: HTTP_PORT
     value: "8080"
-  - name: DISABLE_QUAYIO_SCAN
-    value: "yes"
 
 serviceAccount:
   create: true
