@@ -8,5 +8,5 @@ roleRef:
   name: tks-image-scanner
 subjects:
 - kind: ServiceAccount
-  name: image-scanner
-  namespace: tks-system
+  name: {{ template "runtime-image-scanner.serviceAccountName" . }}
+  namespace: {{ .Release.Namespace }}

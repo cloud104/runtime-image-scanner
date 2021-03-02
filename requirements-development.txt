@@ -8,10 +8,10 @@ coverage-badge==1.0.1
 docutils==0.16
 google-auth==1.18.0
 idna==2.10
-kubernetes==11.0.0
+kubernetes==12.0.1
 lockfile==0.12.2
 oauthlib==3.1.0
-prometheus-client==0.8.0
+prometheus-client==0.9.0
 pyasn1==0.4.8
 pyasn1-modules==0.2.8
 python-dateutil==2.8.1

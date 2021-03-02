@@ -11,7 +11,6 @@ import requests
 class TestSetup(unittest.TestCase):
     def tearDown(self) -> None:
         os.rmdir("/tmp/trivyreporttest1")
-        os.rmdir("/tmp/secreportdirtest1")
 
     @mock.patch('subprocess.Popen')
     def test_setup_dirs(self, mock_popen):
@@ -41,32 +40,6 @@ class TestCleanup(unittest.TestCase):
         self.assertIsNone(scanner.cleanup())
         scanner.TRIVY_REPORT_DIR = "/tmp/trivyreportstest2w2222"
         self.assertIsNone(scanner.cleanup())
-
-
-class TestReadSecReport(unittest.TestCase):
-    def test_read_sec_report(self):
-        scanner.LOG_LEVEL = "fatal"
-        scanner.SEC_REPORT_DIR = "./tests/sec_reports/01"
-        self.assertEqual(type(scanner.read_sec_report()), bytes)
-        scanner.SEC_REPORT_DIR = "./tests/fakedir"
-        self.assertRaises(FileNotFoundError, scanner.read_sec_report)
-
-
-class TestWriteSecReport(unittest.TestCase):
-    def setUp(self) -> None:
-        os.makedirs("/tmp/testcreatesecreport")
-
-    def tearDown(self) -> None:
-        os.remove("/tmp/testcreatesecreport/sec_report.json")
-        os.rmdir("/tmp/testcreatesecreport")
-
-    def test_write_sec_report(self):
-        scanner.SEC_REPORT_DIR = "/tmp/testcreatesecreport"
-        report = {"teste": "123"}
-        self.assertIsNone(scanner.write_sec_report(report))
-        with open("{}/sec_report.json".format(scanner.SEC_REPORT_DIR), "r") as f:
-            t = json.loads(f.read())
-        self.assertEqual(type(t), dict)
 
 
 class TestConvertLabelSelector(unittest.TestCase):
@@ -354,20 +327,10 @@ class TestHTTPServer(unittest.TestCase):
         scanner.start_http_server(12345)
         r = requests.get("http://127.0.0.1:12345/metrics")
         self.assertTrue(r.ok)
-        r1 = requests.get("http://127.0.0.1:12345/report")
-        self.assertTrue(r1.ok)
         r2 = requests.get("http://127.0.0.1:12345/xxxxxx")
         self.assertFalse(r2.ok)
         r3 = requests.get("http://127.0.0.1:12345/")
         self.assertTrue(r3.ok)
-
-    @mock.patch('scanner.read_sec_report')
-    def test_http_nok(self, mock_sec_report):
-        mock_sec_report.side_effect = FileNotFoundError("test")
-        scanner.start_http_server(23456)
-        r1 = requests.get("http://127.0.0.1:23456/report")
-        self.assertEqual(r1.status_code, 404)
-
 
 class TestListAllPods(unittest.TestCase):
     @mock.patch('kubernetes.client.CoreV1Api')
