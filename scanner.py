@@ -311,7 +311,7 @@ def create_prom_points():
         p = list(pod.keys())[0]
         for container in pod[p]['containers']:
             try:
-                for t in VUL_LIST[container]:
+                for t in VUL_LIST[container]["Results"]:
                     for v in t["Vulnerabilities"]:
                         log.info("Prom point pod: {}".format(p))
                         vulnerability_gauge.labels(
@@ -438,7 +438,6 @@ class VulnerabilityHandler(BaseHTTPRequestHandler):
             <body>
             <h1>Hi,</h1>
             <p>Take a look at <code>/metrics</code> to get metrics.</p>
-            <p>You can get a full report here: <code>/report</code></p>
             </body>
             </html>""")
         else:
