@@ -2,6 +2,9 @@ import json
 import time
 import unittest
 import os
+
+import kubernetes.client
+
 import scanner
 from unittest import mock
 from kubernetes import client
@@ -332,6 +335,7 @@ class TestHTTPServer(unittest.TestCase):
         r3 = requests.get("http://127.0.0.1:12345/")
         self.assertTrue(r3.ok)
 
+
 class TestListAllPods(unittest.TestCase):
     @mock.patch('kubernetes.client.CoreV1Api')
     def test_list_all_pods(self, mock_core_api):
@@ -380,28 +384,33 @@ class TestReadSecrets(unittest.TestCase):
 
 
 class TestPodsAssociatedWithIngress(unittest.TestCase):
-    @mock.patch('kubernetes.client.ExtensionsV1beta1Api')
+    @mock.patch('kubernetes.client.NetworkingV1Api')
     @mock.patch('kubernetes.client.CoreV1Api')
     def test_pods_associated_with_ingress(self, mock_core_api, mock_extensions_api):
-        ingress_list = client.ExtensionsV1beta1IngressList(
+        ingress_list = client.V1IngressList(
             kind="IngressList",
             items=[
-                client.ExtensionsV1beta1Ingress(
+                client.V1Ingress(
                     metadata=client.V1ObjectMeta(
                         name="ingress1",
                         namespace="teste1"
                     ),
-                    spec=client.ExtensionsV1beta1IngressSpec(
+                    spec=client.V1IngressSpec(
                         rules=[
-                            client.ExtensionsV1beta1IngressRule(
+                            client.V1IngressRule(
                                 host="test1.local.int",
-                                http=client.ExtensionsV1beta1HTTPIngressRuleValue(
+                                http=client.V1HTTPIngressRuleValue(
                                     paths=[
-                                        client.ExtensionsV1beta1HTTPIngressPath(
+                                        client.V1HTTPIngressPath(
                                             path="/teste1",
-                                            backend=client.ExtensionsV1beta1IngressBackend(
-                                                service_name="service-teste1",
-                                                service_port=80
+                                            path_type="Prefix",
+                                            backend=client.V1IngressBackend(
+                                                service=client.V1IngressServiceBackend(
+                                                    name="service-teste1",
+                                                    port=client.V1ServiceBackendPort(
+                                                        number=80
+                                                    )
+                                                )
                                             )
                                         )
                                     ]
@@ -462,28 +471,29 @@ class TestPodsAssociatedWithIngress(unittest.TestCase):
         i = scanner.get_pods_associated_with_ingress()
         self.assertEqual(len(i), 1)
 
-    @mock.patch('kubernetes.client.ExtensionsV1beta1Api')
+    @mock.patch('kubernetes.client.NetworkingV1Api')
     @mock.patch('kubernetes.client.CoreV1Api')
     def test_no_pods_associated_with_ingress(self, mock_core_api, mock_extensions_api):
-        ingress_list = client.ExtensionsV1beta1IngressList(
+        ingress_list = client.V1IngressList(
             kind="IngressList",
             items=[
-                client.ExtensionsV1beta1Ingress(
+                client.V1Ingress(
                     metadata=client.V1ObjectMeta(
                         name="ingress1",
                         namespace="teste1"
                     ),
-                    spec=client.ExtensionsV1beta1IngressSpec(
+                    spec=client.V1IngressSpec(
                         rules=[
-                            client.ExtensionsV1beta1IngressRule(
+                            client.V1IngressRule(
                                 host="test1.local.int",
-                                http=client.ExtensionsV1beta1HTTPIngressRuleValue(
+                                http=client.V1HTTPIngressRuleValue(
                                     paths=[
-                                        client.ExtensionsV1beta1HTTPIngressPath(
+                                        client.V1HTTPIngressPath(
+                                            path_type="Prefix",
                                             path="/teste1",
-                                            backend=client.ExtensionsV1beta1IngressBackend(
-                                                service_name="service-teste1",
-                                                service_port=80
+                                            backend=client.V1IngressBackend(
+                                                service="service-teste1",
+                                                resource=80
                                             )
                                         )
                                     ]

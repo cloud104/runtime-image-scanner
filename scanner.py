@@ -244,9 +244,9 @@ def convert_label_selector(label):
 def get_pods_associated_with_ingress():
     log.debug("get pods associated with ingress")
     pods = list()
-    extensions = client.ExtensionsV1beta1Api()
     v1 = client.CoreV1Api()
-    ingresses = extensions.list_ingress_for_all_namespaces()
+    net = client.NetworkingV1Api()
+    ingresses = net.list_ingress_for_all_namespaces()
     # Poderia ser um list comprehension? Sim, mas ficaria tão dificil de ler...
     for ingress in ingresses.items:
         for rule in ingress.spec.rules:
@@ -255,8 +255,10 @@ def get_pods_associated_with_ingress():
                 continue
             for path in rule.http.paths:
                 try:
-                    service = v1.read_namespaced_service(name=path.backend.service_name,
+
+                    service = v1.read_namespaced_service(name=path.backend.service.name,
                                                          namespace=ingress.metadata.namespace)
+
                 except ApiException as err:
                     log.error("Ingress: {}, error getting service: {}".format(rule.host, err))
                     continue
@@ -270,12 +272,12 @@ def get_pods_associated_with_ingress():
                 for ep in endpoint.items:
                     if ep.subsets is None:
                         log.warning("The endpoint of service {} comes empty. Skipping verification".format(
-                            path.backend.service_name))
+                            path.backend.service.name))
                         continue
                     for subset in ep.subsets:
                         if subset.addresses is None:
                             log.error("The endpoint subset of service {} has no address. Skipping verification".format(
-                                path.backend.service_name
+                                path.backend.service.name
                             ))
                             continue
                         for address in subset.addresses:
