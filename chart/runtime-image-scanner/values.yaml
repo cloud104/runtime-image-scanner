@@ -1,6 +1,6 @@
 image:
   repository: gcr.io/totvs-kubernetes-service/runtime-image-scanner
-  tag: "v0.0.27"
+  tag: "v0.1.0"
   pullPolicy: IfNotPresent
 
 imagePullSecrets:
