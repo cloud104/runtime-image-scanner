@@ -492,8 +492,10 @@ class TestPodsAssociatedWithIngress(unittest.TestCase):
                                             path_type="Prefix",
                                             path="/teste1",
                                             backend=client.V1IngressBackend(
-                                                service="service-teste1",
-                                                resource=80
+                                                service=client.V1IngressServiceBackend(
+                                                    name="service-teste1",
+                                                    port=80
+                                                )
                                             )
                                         )
                                     ]
