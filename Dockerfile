@@ -13,7 +13,7 @@ COPY scanner.py .
 COPY version.py .
 COPY tests.py .
 COPY scripts/ /app/scripts
-#RUN make test
+RUN make test
 
 # If tests OK, download all deps and install download trivy
 FROM base as builder

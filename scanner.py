@@ -255,10 +255,8 @@ def get_pods_associated_with_ingress():
                 continue
             for path in rule.http.paths:
                 try:
-
                     service = v1.read_namespaced_service(name=path.backend.service.name,
                                                          namespace=ingress.metadata.namespace)
-
                 except ApiException as err:
                     log.error("Ingress: {}, error getting service: {}".format(rule.host, err))
                     continue
