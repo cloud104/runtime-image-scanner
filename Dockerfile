@@ -1,4 +1,4 @@
-FROM python:3.8-slim as base
+FROM python:3.10-slim as base
 
 # Run tests
 FROM base as tester
@@ -20,7 +20,7 @@ FROM base as builder
 COPY requirements.txt /
 RUN apt-get update && apt-get install -y wget && apt-get clean autoclean && apt-get autoremove -y && rm -rf /var/lib/{apt,dpkg,cache,log}/
 RUN pip install --user -r /requirements.txt && \
-    wget https://github.com/aquasecurity/trivy/releases/download/v0.23.0/trivy_0.23.0_Linux-64bit.tar.gz -O /tmp/trivy.tgz && \
+    wget https://github.com/aquasecurity/trivy/releases/download/v0.32.0/trivy_0.32.0_Linux-64bit.tar.gz -O /tmp/trivy.tgz && \
 	tar -xvzf /tmp/trivy.tgz -C /tmp
 
 # Clean image

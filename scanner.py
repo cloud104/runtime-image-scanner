@@ -185,7 +185,7 @@ class Scan:
             safe_image = image.replace("/", "__")
             log.info("Scanning image: {}".format(image))
             system_environment = os.environ.copy()
-            cmd_clear_cache = ["{} image -c {}".format(TRIVY_BIN_PATH, image)]
+            cmd_clear_cache = ["{} image --clear-cache {}".format(TRIVY_BIN_PATH, image)]
             cmd = ["{} image --format=json --ignore-unfixed=true --output={}/{}.json {}".format(TRIVY_BIN_PATH,
                                                                                                 TRIVY_REPORT_DIR,
                                                                                                 safe_image,
@@ -312,6 +312,9 @@ def create_prom_points():
         for container in pod[p]['containers']:
             try:
                 for t in VUL_LIST[container]["Results"]:
+                    if not ("Vulnerabilities" in t):
+                        log.debug("Vulnerabilities keys not found. Passing to next list item")
+                        continue
                     for v in t["Vulnerabilities"]:
                         log.info("Prom point pod: {}".format(p))
                         vulnerability_gauge.labels(
