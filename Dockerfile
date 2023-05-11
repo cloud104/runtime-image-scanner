@@ -20,7 +20,7 @@ FROM base as builder
 COPY requirements.txt /
 RUN apt-get update && apt-get install -y wget && apt-get clean autoclean && apt-get autoremove -y && rm -rf /var/lib/{apt,dpkg,cache,log}/
 RUN pip install --user -r /requirements.txt && \
-    wget https://github.com/aquasecurity/trivy/releases/download/v0.38.3/trivy_0.38.3_Linux-64bit.tar.gz -O /tmp/trivy.tgz && \
+    wget https://github.com/aquasecurity/trivy/releases/download/v0.41.0/trivy_0.41.0_Linux-64bit.tar.gz -O /tmp/trivy.tgz && \
 	tar -xvzf /tmp/trivy.tgz -C /tmp
 
 # Clean image
