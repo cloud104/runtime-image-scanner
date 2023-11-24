@@ -1,4 +1,4 @@
-FROM python:3.10-slim as base
+FROM python:3.11-slim as base
 
 # Run tests
 FROM base as tester
@@ -18,10 +18,11 @@ RUN make test
 # If tests OK, download all deps and install download trivy
 FROM base as builder
 COPY requirements.txt /
+COPY scripts/download_trivy.sh /
+ARG TRIVY_VERSION=0.47.0
 RUN apt-get update && apt-get install -y wget && apt-get clean autoclean && apt-get autoremove -y && rm -rf /var/lib/{apt,dpkg,cache,log}/
 RUN pip install --user -r /requirements.txt && \
-    wget https://github.com/aquasecurity/trivy/releases/download/v0.38.3/trivy_0.38.3_Linux-64bit.tar.gz -O /tmp/trivy.tgz && \
-	tar -xvzf /tmp/trivy.tgz -C /tmp
+    chmod +x /download_trivy.sh && /download_trivy.sh
 
 # Clean image
 FROM base
