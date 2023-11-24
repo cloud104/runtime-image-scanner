@@ -1,18 +1,16 @@
 steps:
 - name: 'gcr.io/cloud-builders/docker'
-  args: ['build', '-t', 'gcr.io/totvs-kubernetes-service/runtime-image-scanner:$TAG_NAME', '.']
-  id: 'build-and-test'
-
-#- name: 'gcr.io/totvs-kubernetes-service/helm-push:v1.0.3'
-#  args: ['helm push chart/runtime-image-scanner tks']
-#  secretEnv: ['HELM_REPO_PASSWORD']
-#  id: 'helm push'
-
+  args: ['run', '--privileged', 'linuxkit/binfmt:v0.7']
+  id: 'initialize-qemu'
 - name: 'gcr.io/cloud-builders/docker'
-  args: ['push', 'gcr.io/totvs-kubernetes-service/runtime-image-scanner:$TAG_NAME']
-  id: 'push'
-
-#secrets:
-#- kmsKeyName: 'projects/totvs-kubernetes-service/locations/global/keyRings/chartmuseum/cryptoKeys/HELM_REPO_PASSWORD'
-#  secretEnv:
-#    HELM_REPO_PASSWORD: 'CiQAMxdOcnfMUD7GdP0ZCDs3rthNUJb7oRXhEBkG/RqNlNJK96MSOQBXufE0qjnedohliQUPZPMXf49tMe6JQBhNbIrMmEgiTUWmIs1Xjs91MMU1qlDH6zkSAul4xkpa7A=='
+  args: ['buildx', 'create', '--name', 'mybuilder']
+  id: 'create-builder'
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['buildx', 'use', 'mybuilder']
+  id: 'select-builder'
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['buildx', 'inspect', '--bootstrap']
+  id: 'show-target-build-platforms'
+- name: "gcr.io/cloud-builders/docker"
+  args: ["buildx", "build", "--push", "--platform","linux/arm64,linux/amd64", "-t", "gcr.io/totvs-kubernetes-service/runtime-image-scanner:$TAG_NAME", "."]
+  id: 'build'
