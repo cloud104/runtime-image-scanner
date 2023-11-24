@@ -1,7 +1,8 @@
 CONTAINER_NAME=runtime-image-scanner
 REGISTRY=$(CONTAINER_NAME)
 VERSION_FILE=version.py
-TRIVY_VERSION=0.38.3
+#Variable used only to download Trivy locally. For containers, the versions are declared in the Dockerfile.
+TRIVY_VERSION=0.47.0
 
 patch: build-patch git-push
 minor: build-minor git-push
@@ -10,8 +11,7 @@ major: build-major git-push
 export LOG_LEVEL=invalid
 
 trivy:
-	wget https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz -O /tmp/trivy.tgz
-	tar -xvzf /tmp/trivy.tgz -C /tmp
+	TRIVY_VERSION=$(TRIVY_VERSION) scripts/download_trivy.sh
 
 test: unit-test test-reports badge min-coverage
 
