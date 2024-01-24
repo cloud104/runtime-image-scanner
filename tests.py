@@ -315,6 +315,7 @@ class TestPromPoints(unittest.TestCase):
                 }
             ]
         }
+        scanner.clean_prom_registry()
         p = scanner.create_prom_points().decode()
         if ("container:1" in p) and ("container:2" in p):
             has_container = True
@@ -467,7 +468,7 @@ class TestPodsAssociatedWithIngress(unittest.TestCase):
         mock_extensions_api.return_value = mock.Mock(list_ingress_for_all_namespaces=lambda x=ingress_list: x)
         mock_core_api.return_value = mock.Mock(read_namespaced_service=lambda name, namespace: service,
                                                list_namespaced_endpoints=lambda namespace, label_selector: endpoint)
-
+        scanner.clean_prom_registry()
         i = scanner.get_pods_associated_with_ingress()
         self.assertEqual(len(i), 1)
 

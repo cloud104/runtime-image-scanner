@@ -29,6 +29,7 @@ HTTP_SERVER_PORT = os.getenv("HTTP_PORT", "8080")
 TRIVY_BIN_PATH = os.getenv("TRIVY_BIN_PATH", "./trivy")
 log = logging.getLogger(__name__)
 log_format = '%(asctime)s - [%(levelname)s] [%(threadName)s] [%(funcName)s:%(lineno)d]- %(message)s'
+registry = CollectorRegistry()
 
 log_config = {
     "debug": logging.DEBUG,
@@ -230,7 +231,6 @@ def convert_label_selector(label):
     lbl = str()
     if type(label) is not dict:
         raise TypeError("Label must be a dict")
-
     for key, value in label.items():
         converted_label = "=".join([str(key), str(value)])
         if lbl == '':
@@ -247,6 +247,8 @@ def get_pods_associated_with_ingress():
     v1 = client.CoreV1Api()
     net = client.NetworkingV1Api()
     ingresses = net.list_ingress_for_all_namespaces()
+    ingress_without_pod = Gauge("ingress_security_issue", "Ingress found without associated pod.",
+                                ["IngressName", "IngressNamespace", "ServiceName"], registry=registry)
     # Poderia ser um list comprehension? Sim, mas ficaria tão dificil de ler...
     for ingress in ingresses.items:
         for rule in ingress.spec.rules:
@@ -260,40 +262,51 @@ def get_pods_associated_with_ingress():
                 except ApiException as err:
                     log.error("Ingress: {}, error getting service: {}".format(rule.host, err))
                     continue
-                try:
-                    endpoint = v1.list_namespaced_endpoints(namespace=ingress.metadata.namespace,
-                                                            label_selector=convert_label_selector(
-                                                                service.spec.selector))
-                except ApiException as err:
-                    log.error("Ingress: {}, error getting endpoints. ".format(rule.host, err))
-                    continue
-                for ep in endpoint.items:
-                    if ep.subsets is None:
-                        log.warning("The endpoint of service {} comes empty. Skipping verification".format(
-                            path.backend.service.name))
+                if service.spec.type == "ExternalName" and service.spec.selector == None:
+                    log.warning("The Ingress {} is pointing to the service {} and this service is of type {} and does not contain a selector.  Skipping verification".format(ingress.metadata.name, service.metadata.name,service.spec.type))
+                #     ingress_without_pod.labels(IngressName=ingress.metadata.name,
+                #                                IngressNamespace=ingress.metadata.namespace,
+                #                                ServiceName=service.metadata.name
+                #                                ).set(1)
+                #
+                # else:
+                #     ingress_without_pod.labels(IngressName=ingress.metadata.name,
+                #                                IngressNamespace=ingress.metadata.namespace,
+                #                                ServiceName=service.metadata.name).set(0)
+                if service.spec.type != "ExternalName":
+                    try:
+                        endpoint = v1.list_namespaced_endpoints(namespace=ingress.metadata.namespace,
+                                                                label_selector=convert_label_selector(
+                                                                    service.spec.selector))
+                    except ApiException as err:
+                        log.error("Ingress: {}, error getting endpoints. ".format(rule.host, err))
                         continue
-                    for subset in ep.subsets:
-                        if subset.addresses is None:
-                            log.error("The endpoint subset of service {} has no address. Skipping verification".format(
-                                path.backend.service.name
-                            ))
+                    for ep in endpoint.items:
+                        if ep.subsets is None:
+                            log.warning("The endpoint of service {} comes empty. Skipping verification".format(
+                                path.backend.service.name))
                             continue
-                        for address in subset.addresses:
-                            if address.target_ref is None:
-                                log.error(
-                                    "The target ref of address {} is none. Skipping verification".format(
-                                        subset.addresses
-                                    ))
+                        for subset in ep.subsets:
+                            if subset.addresses is None:
+                                log.error("The endpoint subset of service {} has no address. Skipping verification".format(
+                                    path.backend.service.name
+                                ))
                                 continue
-                            if address.target_ref.name not in pods:
-                                pods.append(address.target_ref.name)
+                            for address in subset.addresses:
+                                if address.target_ref is None:
+                                    log.error(
+                                        "The target ref of address {} is none. Skipping verification".format(
+                                            subset.addresses
+                                        ))
+                                    continue
+                                if address.target_ref.name not in pods:
+                                    pods.append(address.target_ref.name)
     log.debug("Pods associated with ingress: {}".format(pods))
     return pods
 
 
 def create_prom_points():
     log.debug("create prom points")
-    registry = CollectorRegistry()
     vulnerability_gauge = Gauge("pod_security_issue", "CVE found in all images associated with pod",
                                 ["PodName",
                                  "Namespace",
@@ -484,6 +497,12 @@ def setup():
     log.debug("Trivy Download db stdout {}".format(trivy_clear_cache.stdout.read().decode()))
     log.debug("Trivy Download db stderr {}".format(trivy_clear_cache.stderr.read().decode()))
 
+def clean_prom_registry():
+    log.info("Cleanning Prometheus Registry Collectors")
+    collectors = list(registry._collector_to_names.keys())
+    for collector in collectors:
+        registry.unregister(collector)
+
 
 if __name__ == '__main__':
     log.info("Starting Image Scanner version: {}".format(VERSION))
@@ -497,6 +516,7 @@ if __name__ == '__main__':
         try:
             main()
             cleanup()
+            cleanpromregistry()
             log.info("Sleeping for {}s".format(SCAN_INTERVAL))
             time.sleep(int(SCAN_INTERVAL))
         except KeyboardInterrupt:

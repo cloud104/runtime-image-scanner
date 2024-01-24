@@ -1,7 +1,7 @@
 CONTAINER_NAME=runtime-image-scanner
 REGISTRY=$(CONTAINER_NAME)
 VERSION_FILE=version.py
-TRIVY_VERSION=0.38.3
+TRIVY_VERSION=0.48.3
 
 patch: build-patch git-push
 minor: build-minor git-push
