@@ -19,7 +19,7 @@ RUN make test
 FROM base as builder
 COPY requirements.txt /
 COPY scripts/download_trivy.sh /
-ARG TRIVY_VERSION=0.47.0
+ARG TRIVY_VERSION=0.49.1
 RUN apt-get update && apt-get install -y wget && apt-get clean autoclean && apt-get autoremove -y && rm -rf /var/lib/{apt,dpkg,cache,log}/
 RUN pip install --user -r /requirements.txt && \
     chmod +x /download_trivy.sh && /download_trivy.sh
