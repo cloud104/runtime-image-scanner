@@ -27,6 +27,7 @@ TRIVY_REPORT_DIR = os.getenv("TRIVY_REPORT_DIR", "/tmp/trivyreport")
 SCAN_INTERVAL = os.getenv("SCAN_INTERVAL", "120")
 HTTP_SERVER_PORT = os.getenv("HTTP_PORT", "8080")
 TRIVY_BIN_PATH = os.getenv("TRIVY_BIN_PATH", "./trivy")
+IGNORE_UNFIXED = os.getenv("IGNORE_UNFIXED", "true")
 log = logging.getLogger(__name__)
 log_format = '%(asctime)s - [%(levelname)s] [%(threadName)s] [%(funcName)s:%(lineno)d]- %(message)s'
 
@@ -186,10 +187,11 @@ class Scan:
             log.info("Scanning image: {}".format(image))
             system_environment = os.environ.copy()
             cmd_clear_cache = ["{} image --clear-cache {}".format(TRIVY_BIN_PATH, image)]
-            cmd = ["{} image --format=json --ignore-unfixed=true --output={}/{}.json {}".format(TRIVY_BIN_PATH,
-                                                                                                TRIVY_REPORT_DIR,
-                                                                                                safe_image,
-                                                                                                image)]
+            cmd = ["{} image --format=json --ignore-unfixed={} --output={}/{}.json {}".format(TRIVY_BIN_PATH,
+                                                                                              IGNORE_UNFIXED,
+                                                                                              TRIVY_REPORT_DIR,
+                                                                                              safe_image,
+                                                                                              image)]
 
             log.debug("Trivy clear cache cmd: {}".format(cmd_clear_cache))
             trivy_clear_cache = subprocess.Popen(cmd_clear_cache, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -304,6 +306,7 @@ def create_prom_points():
                                  "PkgName",
                                  "InstalledVersion",
                                  "FixedVersion",
+                                 "Status",
                                  "Severity"], registry=registry)
     pods = parse_pods(get_docker_auth=False)
     public_pods = get_pods_associated_with_ingress()
@@ -326,7 +329,8 @@ def create_prom_points():
                             v["VulnerabilityID"],
                             v["PkgName"],
                             v["InstalledVersion"],
-                            v["FixedVersion"],
+                            v.get("FixedVersion", "NA"),
+                            v["Status"],
                             v["Severity"]
                         ).set(1)
                         log.debug("Set Point to pod: {} with values: |"
@@ -338,6 +342,7 @@ def create_prom_points():
                                   "Package: {} |"
                                   "Installed Version: {} |"
                                   "Fixed in Version: {} |"
+                                  "Status: {} |"
                                   "Severity: {}".format(p,
                                                         pod[p]['namespace'],
                                                         container,
@@ -346,7 +351,8 @@ def create_prom_points():
                                                         v["VulnerabilityID"],
                                                         v["PkgName"],
                                                         v["InstalledVersion"],
-                                                        v["FixedVersion"],
+                                                        v.get("FixedVersion", "NA"),
+                                                        v["Status"],
                                                         v["Severity"])
                                   )
 
@@ -361,10 +367,12 @@ def create_prom_points():
                           "Package: {} |"
                           "Installed Version: {} |"
                           "Fixed in Version: {} |"
+                          "Status: {} |"
                           "Severity: {}".format(p,
                                                 pod[p]['namespace'],
                                                 container,
                                                 str(p in public_pods),
+                                                "NA",
                                                 "NA",
                                                 "NA",
                                                 "NA",
@@ -377,6 +385,7 @@ def create_prom_points():
                     pod[p]['namespace'],
                     container,
                     str(p in public_pods),
+                    "NA",
                     "NA",
                     "NA",
                     "NA",

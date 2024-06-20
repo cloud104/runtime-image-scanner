@@ -55,6 +55,7 @@ All parameters of this scanner are adjustable via environment variables.
 | SCAN_INTERVAL | 43200 | no | Time in seconds of the execution interval |
 | HTTP_PORT | 8080 | no | Port where the endpoint will listen |
 | TRIVY_BIN_PATH | ./trivy | no | trivy binary path |
+| IGNORE_UNFIXED | true | no | hide unfixed vulnerabilities |
 
 ## Performing unit tests
 Test coverage: ![](coverage.svg)
