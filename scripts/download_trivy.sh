@@ -12,3 +12,4 @@ case $(arch) in
 esac
 
 tar -xvzf /tmp/trivy.tgz -C /tmp
+cp /tmp/trivy $(pwd)

@@ -2,7 +2,7 @@ CONTAINER_NAME=runtime-image-scanner
 REGISTRY=$(CONTAINER_NAME)
 VERSION_FILE=version.py
 #Variable used only to download Trivy locally. For containers, the versions are declared in the Dockerfile.
-TRIVY_VERSION=0.49.1
+TRIVY_VERSION=0.56.2
 
 patch: build-patch git-push
 minor: build-minor git-push
@@ -42,7 +42,7 @@ build-major:
 
 build:
 	@$(eval VERSION=`cat $(VERSION_FILE) | grep "VERSION"|cut -d"=" -f2 | sed -e 's/"//g' -e 's/ //g'`)
-	docker build -t $(REGISTRY):$(VERSION) .
+	docker build -t $(REGISTRY):$(VERSION)-RC- .
 
 clean-dev:
 	docker rmi -f $(CONTAINER_NAME):devel

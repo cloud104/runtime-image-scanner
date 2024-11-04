@@ -186,7 +186,7 @@ class Scan:
             safe_image = image.replace("/", "__")
             log.info("Scanning image: {}".format(image))
             system_environment = os.environ.copy()
-            cmd_clear_cache = ["{} image --clear-cache {}".format(TRIVY_BIN_PATH, image)]
+            cmd_clear_cache = ["{} clean --scan-cache {}".format(TRIVY_BIN_PATH, image)]
             cmd = ["{} image --format=json --ignore-unfixed={} --output={}/{}.json {}".format(TRIVY_BIN_PATH,
                                                                                               IGNORE_UNFIXED,
                                                                                               TRIVY_REPORT_DIR,
@@ -262,33 +262,38 @@ def get_pods_associated_with_ingress():
                 except ApiException as err:
                     log.error("Ingress: {}, error getting service: {}".format(rule.host, err))
                     continue
-                try:
-                    endpoint = v1.list_namespaced_endpoints(namespace=ingress.metadata.namespace,
-                                                            label_selector=convert_label_selector(
-                                                                service.spec.selector))
-                except ApiException as err:
-                    log.error("Ingress: {}, error getting endpoints. ".format(rule.host, err))
-                    continue
-                for ep in endpoint.items:
-                    if ep.subsets is None:
-                        log.warning("The endpoint of service {} comes empty. Skipping verification".format(
-                            path.backend.service.name))
+                if service.spec.type == "ExternalName" and service.spec.selector == None:
+                    log.warning("The Ingress {} is pointing to the service {} and this service is of type {} and does not contain a selector.  Skipping verification".format(ingress.metadata.name,
+                                                                                                                                                                             service.metadata.name,
+                                                                                                                                                                             service.spec.type))
+                if service.spec.type != "ExternalName":
+                    try:
+                        endpoint = v1.list_namespaced_endpoints(namespace=ingress.metadata.namespace,
+                                                                label_selector=convert_label_selector(
+                                                                    service.spec.selector))
+                    except ApiException as err:
+                        log.error("Ingress: {}, error getting endpoints. ".format(rule.host, err))
                         continue
-                    for subset in ep.subsets:
-                        if subset.addresses is None:
-                            log.error("The endpoint subset of service {} has no address. Skipping verification".format(
-                                path.backend.service.name
-                            ))
+                    for ep in endpoint.items:
+                        if ep.subsets is None:
+                            log.warning("The endpoint of service {} comes empty. Skipping verification".format(
+                                path.backend.service.name))
                             continue
-                        for address in subset.addresses:
-                            if address.target_ref is None:
-                                log.error(
-                                    "The target ref of address {} is none. Skipping verification".format(
-                                        subset.addresses
-                                    ))
+                        for subset in ep.subsets:
+                            if subset.addresses is None:
+                                log.error("The endpoint subset of service {} has no address. Skipping verification".format(
+                                    path.backend.service.name
+                                ))
                                 continue
-                            if address.target_ref.name not in pods:
-                                pods.append(address.target_ref.name)
+                            for address in subset.addresses:
+                                if address.target_ref is None:
+                                    log.error(
+                                        "The target ref of address {} is none. Skipping verification".format(
+                                            subset.addresses
+                                        ))
+                                    continue
+                                if address.target_ref.name not in pods:
+                                    pods.append(address.target_ref.name)
     log.debug("Pods associated with ingress: {}".format(pods))
     return pods
 
