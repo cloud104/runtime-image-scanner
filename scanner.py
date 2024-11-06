@@ -188,9 +188,8 @@ class Scan:
             log.info("Scanning image: {}".format(image))
             system_environment = os.environ.copy()
             cmd_clear_cache = ["{} clean --scan-cache {}".format(TRIVY_BIN_PATH, image)]
-            cmd = ["{} image --format=json --ignore-unfixed={} --db-repository {} --output={}/{}.json {}".format(TRIVY_BIN_PATH,
+            cmd = ["{} image --format=json --ignore-unfixed={} --output={}/{}.json {}".format(TRIVY_BIN_PATH,
                                                                                               IGNORE_UNFIXED,
-                                                                                              DB_REPOSITORY,
                                                                                               TRIVY_REPORT_DIR,
                                                                                               safe_image,
                                                                                               image)]
