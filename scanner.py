@@ -28,7 +28,7 @@ SCAN_INTERVAL = os.getenv("SCAN_INTERVAL", "120")
 HTTP_SERVER_PORT = os.getenv("HTTP_PORT", "8080")
 TRIVY_BIN_PATH = os.getenv("TRIVY_BIN_PATH", "./trivy")
 IGNORE_UNFIXED = os.getenv("IGNORE_UNFIXED", "true")
-DB_REPOSITORY= os.getenv("DB_REPOSITORY", "public.ecr.aws/aquasecurity/trivy-db")
+DB_REPOSITORY= os.getenv("DB_REPOSITORY", "public.ecr.aws/aquasecurity/trivy-db,aquasec/trivy-db,ghcr.io/aquasecurity/trivy-db")
 log = logging.getLogger(__name__)
 log_format = '%(asctime)s - [%(levelname)s] [%(threadName)s] [%(funcName)s:%(lineno)d]- %(message)s'
 
@@ -187,9 +187,10 @@ class Scan:
             safe_image = image.replace("/", "__")
             log.info("Scanning image: {}".format(image))
             system_environment = os.environ.copy()
-            cmd_clear_cache = ["{} image --clear-cache  {}".format(TRIVY_BIN_PATH, image)]
-            cmd = ["{} image --format=json --ignore-unfixed={} --output={}/{}.json {}".format(TRIVY_BIN_PATH,
+            cmd_clear_cache = ["{} clean --scan-cache  {}".format(TRIVY_BIN_PATH, image)]
+            cmd = ["{} image --format=json --ignore-unfixed={} --db-repository {} --output={}/{}.json {}".format(TRIVY_BIN_PATH,
                                                                                               IGNORE_UNFIXED,
+                                                                                              DB_REPOSITORY,
                                                                                               TRIVY_REPORT_DIR,
                                                                                               safe_image,
                                                                                               image)]
