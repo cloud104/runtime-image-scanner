@@ -17,6 +17,8 @@ Envs:
     value: "8080"
   - name: IGNORE_UNFIXED
     value: "true"
+  - name: DB_REPOSITORY
+    value: "us-east1-docker.pkg.dev/tks-gcr-pub/trivy-db-mirror/trivy-db-mirror"
 
 serviceAccount:
   create: true

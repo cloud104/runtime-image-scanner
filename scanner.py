@@ -66,7 +66,10 @@ def read_secret(namespace, secret):
     try:
         secret_obj = v1.read_namespaced_secret(secret, namespace)
     except ApiException as err:
-        raise KApiException(err)
+        if '"reason":"NotFound"' in err.body:
+            raise KApiException("SECRET NOT FOUND")
+        else:
+            raise KApiException(err)
     try:
         decoded_password = base64.b64decode(secret_obj.data['.dockerconfigjson']).decode()
     except KeyError:
@@ -125,6 +128,8 @@ def parse_pods(get_docker_auth=True):
                 except KApiException as err:
                     log.info("Error reading secret found on pod. The error returned by "
                              "kubernetes api was: {}".format(err))
+                    log.debug("Error reading secret {}  found on pod: {} in namespace {}. The error returned by "
+                             "kubernetes api was: {}".format(secret.name, pod.metadata.name,pod.metadata.namespace, err))
                 except KeyError:
                     log.info("POD: {} | "
                              "Namespace: {} | "
@@ -189,11 +194,11 @@ class Scan:
             system_environment = os.environ.copy()
             cmd_clear_cache = ["{} clean --scan-cache  {}".format(TRIVY_BIN_PATH, image)]
             cmd = ["{} image --format=json --ignore-unfixed={} --db-repository {} --output={}/{}.json {}".format(TRIVY_BIN_PATH,
-                                                                                              IGNORE_UNFIXED,
-                                                                                              DB_REPOSITORY,
-                                                                                              TRIVY_REPORT_DIR,
-                                                                                              safe_image,
-                                                                                              image)]
+                                                                                                                 IGNORE_UNFIXED,
+                                                                                                                 DB_REPOSITORY,
+                                                                                                                 TRIVY_REPORT_DIR,
+                                                                                                                 safe_image,
+                                                                                                                 image)]
 
             log.debug("Trivy clear cache cmd: {}".format(cmd_clear_cache))
             trivy_clear_cache = subprocess.Popen(cmd_clear_cache, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -223,8 +228,11 @@ class Scan:
             log.debug("STDOUT: {}".format(trivy_scan.stdout.read().decode()))
             log.debug("STDERR: {}".format(trivy_scan.stderr.read().decode()))
             log.debug("STATUS CODE: {}".format(trivy_scan.returncode))
-            # log.debug("Parse scan: {}".format(parse_scan(safe_image)))
-            VUL_LIST[image] = parse_scan(safe_image)
+            log.debug("Parse scan: {}".format(parse_scan(safe_image)))
+            if trivy_scan.returncode == 0:
+                VUL_LIST[image] = parse_scan(safe_image)
+            if trivy_scan.returncode == 1:
+                log.debug(f"SCAN: image: {image} running with error next.....   ")
             # log.debug(VUL_LIST)
             QUEUE.task_done()
             log.debug("passou o task_done")
@@ -491,7 +499,7 @@ def setup():
 
     if not os.path.exists(TRIVY_BIN_PATH):
         raise FileNotFoundError("Trivy binary not found at: {}".format(TRIVY_BIN_PATH))
-    cmd_download_db = ["{} image --download-db-only".format(TRIVY_BIN_PATH)]
+    cmd_download_db = ["{} image --download-db-only --db-repository {}".format(TRIVY_BIN_PATH, DB_REPOSITORY)]
     log.debug("Trivy Download db cmd: {}".format(cmd_download_db))
     system_environment = os.environ.copy()
     trivy_clear_cache = subprocess.Popen(cmd_download_db, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True,
