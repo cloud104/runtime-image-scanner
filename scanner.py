@@ -228,8 +228,8 @@ class Scan:
             log.debug("STDOUT: {}".format(trivy_scan.stdout.read().decode()))
             log.debug("STDERR: {}".format(trivy_scan.stderr.read().decode()))
             log.debug("STATUS CODE: {}".format(trivy_scan.returncode))
-            log.debug("Parse scan: {}".format(parse_scan(safe_image)))
             if trivy_scan.returncode == 0:
+                log.debug("Parse scan: {}".format(parse_scan(safe_image)))
                 VUL_LIST[image] = parse_scan(safe_image)
             if trivy_scan.returncode == 1:
                 log.debug(f"SCAN: image: {image} running with error next.....   ")
