@@ -193,7 +193,7 @@ class Scan:
             safe_image = image.replace("/", "__")
             log.info(f"Scanning image: {image}")
             system_environment = os.environ.copy()
-            cmd_clear_cache = [f"{TRIVY_BIN_PATH} clean --scan-cache  {image}"]
+            cmd_clear_cache = [f"{TRIVY_BIN_PATH} clean --scan-cache --cache-dir {cache_dir} {image}"]
             if TRIVY_DEBUG == "true" :
                 cmd_clear_cache = [f"{TRIVY_BIN_PATH} --debug clean --scan-cache  {image}"]
             cmd = [f"{TRIVY_BIN_PATH} image --cache-dir {cache_dir} --format=json --ignore-unfixed={IGNORE_UNFIXED} --db-repository {DB_REPOSITORY} --java-db-repository {JAVA_DB_REPOSITORY} --output={TRIVY_REPORT_DIR}/{safe_image}.json {image}"]
@@ -389,10 +389,10 @@ def start_threads():
     log.debug("start threads")
     enqueue()
     scan = Scan()
-    t1 = threading.Thread(target=scan.trivy("1"))
-    t2 = threading.Thread(target=scan.trivy("2"))
-    t3 = threading.Thread(target=scan.trivy("3"))
-    t4 = threading.Thread(target=scan.trivy("4"))
+    t1 = threading.Thread(target=scan.trivy, args=("1",))
+    t2 = threading.Thread(target=scan.trivy, args=("2",))
+    t3 = threading.Thread(target=scan.trivy, args=("3",))
+    t4 = threading.Thread(target=scan.trivy, args=("4",))
     t1.start()
     t2.start()
     t3.start()
