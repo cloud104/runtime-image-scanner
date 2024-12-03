@@ -25,8 +25,8 @@ VUL_POINTS = bytes()
 LOG_LEVEL = os.getenv("LOG_LEVEL", "info").replace(" ", "").lower()
 TRIVY_DEBUG=os.getenv("TRIVY_DEBUG", "false").lower()
 TRIVY_PARALLEL_THREADS=os.getenv("TRIVY_PARALLEL_THREAD", "5")
-TRIVY_CACHE_DIR=os.getenv("TRIVY_CACHE_DIR" "/tmp/cache/trivy_")
-TRIVY_CACHE_BACKEND=os.getenv("TRIVY_CACHE_BACKEND" "fs")
+TRIVY_CACHE_DIR=os.getenv("TRIVY_CACHE_DIR", "/tmp/cache/trivy")
+TRIVY_CACHE_BACKEND=os.getenv("TRIVY_CACHE_BACKEND", "fs")
 TRIVY_REPORT_DIR=os.getenv("TRIVY_REPORT_DIR", "/tmp/trivyreport")
 SCAN_INTERVAL = os.getenv("SCAN_INTERVAL", "120")
 HTTP_SERVER_PORT = os.getenv("HTTP_PORT", "8080")
@@ -192,7 +192,7 @@ class Scan:
         while self.RUNNING and not QUEUE.empty():
             item = QUEUE.get()
             image = list(item.keys())[0]
-            cache_dir = TRIVY_CACHE_DIR+cache_id
+            cache_dir = str(f"{TRIVY_CACHE_DIR}_{cache_id}")
             safe_image = image.replace("/", "__")
             log.info(f"Scanning image: {image}")
             system_environment = os.environ.copy()
