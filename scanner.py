@@ -23,8 +23,11 @@ QUEUE = queue.Queue()
 VUL_LIST = dict()
 VUL_POINTS = bytes()
 LOG_LEVEL = os.getenv("LOG_LEVEL", "info").replace(" ", "").lower()
-TRIVY_DEBUG=os.getenv("TRIVY_DEBUG", "false")
-TRIVY_REPORT_DIR = os.getenv("TRIVY_REPORT_DIR", "/tmp/trivyreport")
+TRIVY_DEBUG=os.getenv("TRIVY_DEBUG", "false").lower()
+TRIVY_PARALLEL_THREADS=os.getenv("TRIVY_PARALLEL_THREAD", "5")
+TRIVY_CACHE_DIR=os.getenv("TRIVY_CACHE_DIR" "/tmp/cache/trivy_")
+TRIVY_CACHE_BACKEND=os.getenv("TRIVY_CACHE_BACKEND" "fs")
+TRIVY_REPORT_DIR=os.getenv("TRIVY_REPORT_DIR", "/tmp/trivyreport")
 SCAN_INTERVAL = os.getenv("SCAN_INTERVAL", "120")
 HTTP_SERVER_PORT = os.getenv("HTTP_PORT", "8080")
 TRIVY_BIN_PATH = os.getenv("TRIVY_BIN_PATH", "./trivy")
@@ -189,16 +192,16 @@ class Scan:
         while self.RUNNING and not QUEUE.empty():
             item = QUEUE.get()
             image = list(item.keys())[0]
-            cache_dir = str("~/.cache/trivy_"+cache_id)
+            cache_dir = TRIVY_CACHE_DIR+cache_id
             safe_image = image.replace("/", "__")
             log.info(f"Scanning image: {image}")
             system_environment = os.environ.copy()
             cmd_clear_cache = [f"{TRIVY_BIN_PATH} clean --scan-cache --cache-dir {cache_dir} {image}"]
             if TRIVY_DEBUG == "true" :
                 cmd_clear_cache = [f"{TRIVY_BIN_PATH} --debug clean --scan-cache  {image}"]
-            cmd = [f"{TRIVY_BIN_PATH} image --cache-dir {cache_dir} --format=json --ignore-unfixed={IGNORE_UNFIXED} --db-repository {DB_REPOSITORY} --java-db-repository {JAVA_DB_REPOSITORY} --output={TRIVY_REPORT_DIR}/{safe_image}.json {image}"]
+            cmd = [f"{TRIVY_BIN_PATH} image --cache-dir {cache_dir}  --cache-backend {TRIVY_CACHE_BACKEND} --format=json --ignore-unfixed={IGNORE_UNFIXED} --parallel {TRIVY_PARALLEL_THREADS} --db-repository {DB_REPOSITORY} --java-db-repository {JAVA_DB_REPOSITORY} --output={TRIVY_REPORT_DIR}/{safe_image}.json {image}"]
             if TRIVY_DEBUG == "true" :
-                cmd = [f"{TRIVY_BIN_PATH} image --format=json --debug --ignore-unfixed={IGNORE_UNFIXED} --db-repository {DB_REPOSITORY} --java-db-repository {JAVA_DB_REPOSITORY} --output={TRIVY_REPORT_DIR}/{safe_image}.json {image}"]
+                cmd = [f"{TRIVY_BIN_PATH} image --cache-dir {cache_dir} --cache-backend {TRIVY_CACHE_BACKEND} --format=json --debug --ignore-unfixed={IGNORE_UNFIXED} --parallel {TRIVY_PARALLEL_THREADS} --db-repository {DB_REPOSITORY} --java-db-repository {JAVA_DB_REPOSITORY} --output={TRIVY_REPORT_DIR}/{safe_image}.json {image}"]
             log.debug(f"Trivy clear cache cmd: {cmd_clear_cache}")
             trivy_clear_cache = subprocess.Popen(cmd_clear_cache, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                                  shell=True, env=system_environment)
@@ -391,16 +394,16 @@ def start_threads():
     scan = Scan()
     t1 = threading.Thread(target=scan.trivy, args=("1",))
     t2 = threading.Thread(target=scan.trivy, args=("2",))
-    t3 = threading.Thread(target=scan.trivy, args=("3",))
-    t4 = threading.Thread(target=scan.trivy, args=("4",))
+    # t3 = threading.Thread(target=scan.trivy, args=("3",))
+    # t4 = threading.Thread(target=scan.trivy, args=("4",))
     t1.start()
     t2.start()
-    t3.start()
-    t4.start()
+    # t3.start()
+    # t4.start()
     t1.join()
     t2.join()
-    t3.join()
-    t4.join()
+    # t3.join()
+    # t4.join()
 
 
 def main():
