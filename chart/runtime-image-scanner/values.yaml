@@ -19,6 +19,16 @@ Envs:
     value: "true"
   - name: DB_REPOSITORY
     value: "us-east1-docker.pkg.dev/tks-gcr-pub/trivy-db-mirror/trivy-db-mirror"
+  - name: JAVA_DB_REPOSITORY
+    value: "us-east1-docker.pkg.dev/tks-gcr-pub/trivy-db-mirror/trivy-java-db-mirror"
+  - name: TRIVY_CACHE_DIR
+    value: "/root/.cache/trivy"
+  - name: TRIVY_CACHE_BACKEND
+    value: "fs"
+  - name: TRIVY_DEBUG
+    value: "false"
+  - name: TRIVY_PARALLEL_THREADS
+    value: "3"
 
 serviceAccount:
   create: true
