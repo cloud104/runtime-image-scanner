@@ -22,12 +22,15 @@ from version import VERSION
 QUEUE = queue.Queue()
 VUL_LIST = dict()
 VUL_POINTS = bytes()
+# Obtém o número de threads a partir da variável de ambiente ou define o padrão como 2
+TRIVY_SCAN_THREADS = int(os.getenv("TRIVY_SCAN_THREADS", "1"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "info").replace(" ", "").lower()
 TRIVY_DEBUG=os.getenv("TRIVY_DEBUG", "false").lower()
 TRIVY_PARALLEL_THREADS=os.getenv("TRIVY_PARALLEL_THREAD", "3")
 TRIVY_CACHE_DIR=os.getenv("TRIVY_CACHE_DIR", "/tmp/cache/trivy")
 TRIVY_CACHE_BACKEND=os.getenv("TRIVY_CACHE_BACKEND", "fs")
 TRIVY_REPORT_DIR=os.getenv("TRIVY_REPORT_DIR", "/tmp/trivyreport")
+TRIVY_SCAN_TIMEOUT=os.getenv("TRIVY_SCAN_TIMEOUT","300s")
 SCAN_INTERVAL = os.getenv("SCAN_INTERVAL", "120")
 HTTP_SERVER_PORT = os.getenv("HTTP_PORT", "8080")
 TRIVY_BIN_PATH = os.getenv("TRIVY_BIN_PATH", "./trivy")
@@ -200,6 +203,7 @@ class Scan:
             system_environment = os.environ.copy()
             # Base do comando com ou sem --cache-dir, dependendo de TRIVY_CACHE_BACKEND
             cache_dir_option = f"--cache-dir {cache_dir} " if TRIVY_CACHE_BACKEND == "fs" else ""
+            trivy_timeout_option = f"--timeout {TRIVY_SCAN_TIMEOUT} " if TRIVY_SCAN_TIMEOUT != "300s" else ""
             cmd_clear_cache = [
                 f"{TRIVY_BIN_PATH} clean "
                 f"--scan-cache "
@@ -214,6 +218,7 @@ class Scan:
                 f"--format=json "
                 f"--ignore-unfixed={IGNORE_UNFIXED} "
                 f"{trivy_debug_option}"
+                f"{trivy_timeout_option}"
                 f"--parallel {TRIVY_PARALLEL_THREADS} "
                 f"--db-repository {DB_REPOSITORY} "
                 f"--java-db-repository {JAVA_DB_REPOSITORY} "
@@ -411,18 +416,19 @@ def start_threads():
     log.debug("start threads")
     enqueue()
     scan = Scan()
-    t1 = threading.Thread(target=scan.trivy, args=("1",))
-    t2 = threading.Thread(target=scan.trivy, args=("2",))
-    # t3 = threading.Thread(target=scan.trivy, args=("3",))
-    # t4 = threading.Thread(target=scan.trivy, args=("4",))
-    t1.start()
-    t2.start()
-    # t3.start()
-    # t4.start()
-    t1.join()
-    t2.join()
-    # t3.join()
-    # t4.join()
+    # Cria e inicia as threads dinamicamente
+    threads = []
+    # t1 = threading.Thread(target=scan.trivy, args=("1",))
+    # t2 = threading.Thread(target=scan.trivy, args=("2",))
+    # # t3 = threading.Thread(target=scan.trivy, args=("3",))
+    # # t4 = threading.Thread(target=scan.trivy, args=("4",))
+    for num in range(1, TRIVY_SCAN_THREADS + 1):
+        thread = threading.Thread(target=scan.trivy, args=(str(num),))
+        threads.append(thread)
+        thread.start()
+    # Aguarda o término de todas as threads
+    for thread in threads:
+        thread.join()
 
 
 def main():
