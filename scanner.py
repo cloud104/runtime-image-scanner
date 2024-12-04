@@ -24,7 +24,7 @@ VUL_LIST = dict()
 VUL_POINTS = bytes()
 LOG_LEVEL = os.getenv("LOG_LEVEL", "info").replace(" ", "").lower()
 TRIVY_DEBUG=os.getenv("TRIVY_DEBUG", "false").lower()
-TRIVY_PARALLEL_THREADS=os.getenv("TRIVY_PARALLEL_THREAD", "5")
+TRIVY_PARALLEL_THREADS=os.getenv("TRIVY_PARALLEL_THREAD", "3")
 TRIVY_CACHE_DIR=os.getenv("TRIVY_CACHE_DIR", "/tmp/cache/trivy")
 TRIVY_CACHE_BACKEND=os.getenv("TRIVY_CACHE_BACKEND", "fs")
 TRIVY_REPORT_DIR=os.getenv("TRIVY_REPORT_DIR", "/tmp/trivyreport")
@@ -36,7 +36,6 @@ DB_REPOSITORY= os.getenv("DB_REPOSITORY", "public.ecr.aws/aquasecurity/trivy-db,
 JAVA_DB_REPOSITORY=os.getenv("JAVA_DB_REPOSITORY", "public.ecr.aws/aquasecurity/trivy-java-db,aquasec/trivy-java-db,ghcr.io/aquasecurity/trivy-java-db")
 log = logging.getLogger(__name__)
 log_format = '%(asctime)s - [%(levelname)s] [%(threadName)s] [%(funcName)s:%(lineno)d]- %(message)s'
-
 log_config = {
     "debug": logging.DEBUG,
     "info": logging.INFO,
@@ -44,6 +43,9 @@ log_config = {
     "critical": logging.CRITICAL,
     "fatal": logging.FATAL
 }
+
+# Base do comando com ou sem --debug, dependendo de TRIVY_DEBUG
+trivy_debug_option = f"--debug " if TRIVY_DEBUG == "true" else ""
 
 try:
     logging.basicConfig(level=log_config[LOG_LEVEL], format=log_format)
@@ -192,16 +194,33 @@ class Scan:
         while self.RUNNING and not QUEUE.empty():
             item = QUEUE.get()
             image = list(item.keys())[0]
-            cache_dir = str(f"{TRIVY_CACHE_DIR}_{cache_id}")
+            cache_dir = f"{TRIVY_CACHE_DIR}_"+f"{cache_id}"
             safe_image = image.replace("/", "__")
             log.info(f"Scanning image: {image}")
             system_environment = os.environ.copy()
-            cmd_clear_cache = [f"{TRIVY_BIN_PATH} clean --scan-cache --cache-dir {cache_dir} {image}"]
-            if TRIVY_DEBUG == "true" :
-                cmd_clear_cache = [f"{TRIVY_BIN_PATH} --debug clean --scan-cache  {image}"]
-            cmd = [f"{TRIVY_BIN_PATH} image --cache-dir {cache_dir}  --cache-backend {TRIVY_CACHE_BACKEND} --format=json --ignore-unfixed={IGNORE_UNFIXED} --parallel {TRIVY_PARALLEL_THREADS} --db-repository {DB_REPOSITORY} --java-db-repository {JAVA_DB_REPOSITORY} --output={TRIVY_REPORT_DIR}/{safe_image}.json {image}"]
-            if TRIVY_DEBUG == "true" :
-                cmd = [f"{TRIVY_BIN_PATH} image --cache-dir {cache_dir} --cache-backend {TRIVY_CACHE_BACKEND} --format=json --debug --ignore-unfixed={IGNORE_UNFIXED} --parallel {TRIVY_PARALLEL_THREADS} --db-repository {DB_REPOSITORY} --java-db-repository {JAVA_DB_REPOSITORY} --output={TRIVY_REPORT_DIR}/{safe_image}.json {image}"]
+            # Base do comando com ou sem --cache-dir, dependendo de TRIVY_CACHE_BACKEND
+            cache_dir_option = f"--cache-dir {cache_dir} " if TRIVY_CACHE_BACKEND == "fs" else ""
+            cmd_clear_cache = [
+                f"{TRIVY_BIN_PATH} clean "
+                f"--scan-cache "
+                f"{trivy_debug_option}"
+                f"--cache-dir {cache_dir} "
+                f"{image}"
+            ]
+            cmd = [
+                f"{TRIVY_BIN_PATH} image "
+                f"{cache_dir_option}"
+                f"--cache-backend {TRIVY_CACHE_BACKEND} "
+                f"--format=json "
+                f"--ignore-unfixed={IGNORE_UNFIXED} "
+                f"{trivy_debug_option}"
+                f"--parallel {TRIVY_PARALLEL_THREADS} "
+                f"--db-repository {DB_REPOSITORY} "
+                f"--java-db-repository {JAVA_DB_REPOSITORY} "
+                f"--output={TRIVY_REPORT_DIR}/{safe_image}.json "
+                f"{image}"
+            ]
+
             log.debug(f"Trivy clear cache cmd: {cmd_clear_cache}")
             trivy_clear_cache = subprocess.Popen(cmd_clear_cache, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                                  shell=True, env=system_environment)
@@ -479,9 +498,14 @@ def setup():
 
     if not os.path.exists(TRIVY_BIN_PATH):
         raise FileNotFoundError(f"Trivy binary not found at: {TRIVY_BIN_PATH}")
-    cmd_download_db = [f"{TRIVY_BIN_PATH} image --download-db-only --db-repository {DB_REPOSITORY}"]
-    if TRIVY_DEBUG == "true" :
-        cmd_download_db = [f"{TRIVY_BIN_PATH} image --debug --download-db-only --db-repository {DB_REPOSITORY}"]
+    cmd_download_db = [
+        f"{TRIVY_BIN_PATH} "
+        f"image "
+        f"{trivy_debug_option} "
+        f"--download-db-only "
+        f"--db-repository {DB_REPOSITORY} "
+        f"--java-db-repository {JAVA_DB_REPOSITORY}"
+    ]
     log.debug(f"Trivy Download db cmd: {cmd_download_db}")
     system_environment = os.environ.copy()
     trivy_clear_cache = subprocess.Popen(cmd_download_db, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True,
