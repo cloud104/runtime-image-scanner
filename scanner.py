@@ -31,12 +31,14 @@ TRIVY_CACHE_DIR=os.getenv("TRIVY_CACHE_DIR", "/tmp/cache/trivy")
 TRIVY_CACHE_BACKEND=os.getenv("TRIVY_CACHE_BACKEND", "fs")
 TRIVY_REPORT_DIR=os.getenv("TRIVY_REPORT_DIR", "/tmp/trivyreport")
 TRIVY_SCAN_TIMEOUT=os.getenv("TRIVY_SCAN_TIMEOUT","300s")
+TRIVY_CMD_SCAN_TIMEOUT=os.getenv("TRIVY_CMD_SCAN_TIMEOUT", "1200") # em segundos
 SCAN_INTERVAL = os.getenv("SCAN_INTERVAL", "120")
 HTTP_SERVER_PORT = os.getenv("HTTP_PORT", "8080")
 TRIVY_BIN_PATH = os.getenv("TRIVY_BIN_PATH", "./trivy")
 IGNORE_UNFIXED = os.getenv("IGNORE_UNFIXED", "true")
 DB_REPOSITORY= os.getenv("DB_REPOSITORY", "public.ecr.aws/aquasecurity/trivy-db,aquasec/trivy-db,ghcr.io/aquasecurity/trivy-db")
 JAVA_DB_REPOSITORY=os.getenv("JAVA_DB_REPOSITORY", "public.ecr.aws/aquasecurity/trivy-java-db,aquasec/trivy-java-db,ghcr.io/aquasecurity/trivy-java-db")
+TRIVY_SCAN_COMMUNICATE=os.getenv("TRIVY_SCAN_COMMUNICATE", "false")
 log = logging.getLogger(__name__)
 log_format = '%(asctime)s - [%(levelname)s] [%(threadName)s] [%(funcName)s:%(lineno)d]- %(message)s'
 log_config = {
@@ -203,7 +205,7 @@ class Scan:
             system_environment = os.environ.copy()
             # Base do comando com ou sem --cache-dir, dependendo de TRIVY_CACHE_BACKEND
             cache_dir_option = f"--cache-dir {cache_dir} " if TRIVY_CACHE_BACKEND == "fs" else ""
-            trivy_timeout_option = f"--timeout {TRIVY_SCAN_TIMEOUT} " if TRIVY_SCAN_TIMEOUT != "300s" else ""
+            trivy_timeout_option = f"--timeout {TRIVY_SCAN_TIMEOUT}s " if TRIVY_SCAN_TIMEOUT != "300s" else ""
             cmd_clear_cache = [
                 f"{TRIVY_BIN_PATH} clean "
                 f"--scan-cache "
@@ -250,10 +252,19 @@ class Scan:
                                           stderr=subprocess.PIPE,
                                           env=system_environment,
                                           shell=True)
-            trivy_scan.wait()
-            log.debug(f"STDOUT: {trivy_scan.stdout.read().decode()}")
-            log.debug(f"STDERR: {trivy_scan.stderr.read().decode()}")
-            log.debug(f"STATUS CODE: {trivy_scan.returncode}")
+            if TRIVY_SCAN_COMMUNICATE == "true":
+                # Usa communicate para evitar problemas de buffer e capturar saída
+                stdout, stderr = trivy_scan.communicate(timeout=int(TRIVY_SCAN_TIMEOUT))
+                # Loga as saídas do comando
+                log.debug(f"STDOUT Scan: {stdout.decode()}")
+                log.debug(f"STDERR Scan: {stderr.decode()}")
+                log.debug(f"STATUS CODE Scan: {trivy_scan.returncode}")
+            else:
+                trivy_scan.wait(timeout=int(TRIVY_SCAN_TIMEOUT))
+                log.debug(f"STDOUT: {trivy_scan.stdout.read().decode()}")
+                log.debug(f"STDERR: {trivy_scan.stderr.read().decode()}")
+                log.debug(f"STATUS CODE: {trivy_scan.returncode}")
+
             if trivy_scan.returncode == 0:
                 #log.debug(f"PARSE SCAN: {parse_scan(safe_image)}")
                 VUL_LIST[image] = parse_scan(safe_image)

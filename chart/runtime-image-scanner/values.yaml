@@ -29,6 +29,10 @@ Envs:
     value: "false"
   - name: TRIVY_PARALLEL_THREADS
     value: "3"
+  - name: TRIVY_CMD_SCAN_TIMEOUT
+    value: "1200"
+  - name: TRIVY_SCAN_COMMUNICATE
+    value: "false"
 
 serviceAccount:
   create: true
