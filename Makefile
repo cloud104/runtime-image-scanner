@@ -42,10 +42,10 @@ build-major:
 
 build:
 	@$(eval VERSION=`cat $(VERSION_FILE) | grep "VERSION"|cut -d"=" -f2 | sed -e 's/"//g' -e 's/ //g'`)
-	docker build -t $(REGISTRY):v$(VERSION)-rc-2.14 .
+	docker build -t $(REGISTRY):v$(VERSION)-rc- .
 push:
 	@$(eval VERSION=`cat $(VERSION_FILE) | grep "VERSION"|cut -d"=" -f2 | sed -e 's/"//g' -e 's/ //g'`)
-	docker push $(REGISTRY):v$(VERSION)-rc-2.14
+	docker push $(REGISTRY):v$(VERSION)-rc-
 
 clean-dev:
 	docker rmi -f $(CONTAINER_NAME):devel
