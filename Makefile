@@ -1,5 +1,5 @@
 CONTAINER_NAME=runtime-image-scanner
-REGISTRY=$(CONTAINER_NAME)
+REGISTRY=gcr.io/totvs-kubernetes-service/$(CONTAINER_NAME)
 VERSION_FILE=version.py
 #Variable used only to download Trivy locally. For containers, the versions are declared in the Dockerfile.
 TRIVY_VERSION=0.58.0
@@ -42,7 +42,10 @@ build-major:
 
 build:
 	@$(eval VERSION=`cat $(VERSION_FILE) | grep "VERSION"|cut -d"=" -f2 | sed -e 's/"//g' -e 's/ //g'`)
-	docker build -t $(REGISTRY):$(VERSION)-RC- .
+	docker build -t $(REGISTRY):v$(VERSION)-rc-2.14 .
+push:
+	@$(eval VERSION=`cat $(VERSION_FILE) | grep "VERSION"|cut -d"=" -f2 | sed -e 's/"//g' -e 's/ //g'`)
+	docker push $(REGISTRY):v$(VERSION)-rc-2.14
 
 clean-dev:
 	docker rmi -f $(CONTAINER_NAME):devel

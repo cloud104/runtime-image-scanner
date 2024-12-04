@@ -205,7 +205,7 @@ class Scan:
             system_environment = os.environ.copy()
             # Base do comando com ou sem --cache-dir, dependendo de TRIVY_CACHE_BACKEND
             cache_dir_option = f"--cache-dir {cache_dir} " if TRIVY_CACHE_BACKEND == "fs" else ""
-            trivy_timeout_option = f"--timeout {TRIVY_SCAN_TIMEOUT}s " if TRIVY_SCAN_TIMEOUT != "300s" else ""
+            trivy_timeout_option = f"--timeout {TRIVY_SCAN_TIMEOUT} " if TRIVY_SCAN_TIMEOUT != "300s" else ""
             cmd_clear_cache = [
                 f"{TRIVY_BIN_PATH} clean "
                 f"--scan-cache "
@@ -254,13 +254,13 @@ class Scan:
                                           shell=True)
             if TRIVY_SCAN_COMMUNICATE == "true":
                 # Usa communicate para evitar problemas de buffer e capturar saída
-                stdout, stderr = trivy_scan.communicate(timeout=int(TRIVY_SCAN_TIMEOUT))
+                stdout, stderr = trivy_scan.communicate(timeout=int(TRIVY_CMD_SCAN_TIMEOUT))
                 # Loga as saídas do comando
                 log.debug(f"STDOUT Scan: {stdout.decode()}")
                 log.debug(f"STDERR Scan: {stderr.decode()}")
                 log.debug(f"STATUS CODE Scan: {trivy_scan.returncode}")
             else:
-                trivy_scan.wait(timeout=int(TRIVY_SCAN_TIMEOUT))
+                trivy_scan.wait(timeout=int(TRIVY_CMD_SCAN_TIMEOUT))
                 log.debug(f"STDOUT: {trivy_scan.stdout.read().decode()}")
                 log.debug(f"STDERR: {trivy_scan.stderr.read().decode()}")
                 log.debug(f"STATUS CODE: {trivy_scan.returncode}")
@@ -534,6 +534,23 @@ def setup():
 
 if __name__ == '__main__':
     log.info(f"Starting Image Scanner version: {VERSION}")
+    log.info(f"Starting Image Scanner trivy_scan_threads: {TRIVY_SCAN_THREADS}")
+    log.info(f"Starting Image Scanner trivy_log_level: {LOG_LEVEL}")
+    log.info(f"Starting Image Scanner trivy_debug_command: {TRIVY_DEBUG}")
+    log.info(f"Starting Image Scanner trivy_parallel_threads: {TRIVY_PARALLEL_THREADS}")
+    log.info(f"Starting Image Scanner trivy_cache_dir: {TRIVY_CACHE_DIR}")
+    log.info(f"Starting Image Scanner trivy_cache_backend: {TRIVY_CACHE_BACKEND}")
+    log.info(f"Starting Image Scanner trivy_report_dir: {TRIVY_REPORT_DIR}")
+    log.info(f"Starting Image Scanner trivy_scan_timeout: {TRIVY_SCAN_TIMEOUT}")
+    log.info(f"Starting Image Scanner tricy_cmd_scan_timeout: {TRIVY_CMD_SCAN_TIMEOUT}")
+    log.info(f"Starting Image Scanner tricu_scan_interval: {SCAN_INTERVAL}")
+    log.info(f"Starting Image Scanner trivy_http_server_port: {HTTP_SERVER_PORT}")
+    log.info(f"Starting Image Scanner trivy_bin_path: {TRIVY_BIN_PATH}")
+    log.info(f"Starting Image Scanner trivy_ignore_unfixes: {IGNORE_UNFIXED}")
+    log.info(f"Starting Image Scanner trivy_db_repository: {DB_REPOSITORY}")
+    log.info(f"Starting Image Scanner trivy_java_db_repository: {JAVA_DB_REPOSITORY}")
+    log.info(f"Starting Image Scanner trivy_scan_communicate: {TRIVY_SCAN_COMMUNICATE}")
+
     try:
         setup()
     except BaseException as e:
