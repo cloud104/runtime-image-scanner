@@ -48,14 +48,23 @@ If you don't find the secret, that image will not be scanned either.
 ## Environment variables
 All parameters of this scanner are adjustable via environment variables.
 
-| Variable | Default Value | Required | Description |
-| --- | --- | --- | --- |
-| LOG_LEVEL | info | no | App log level. Supported values: info, warning, debug, fatal, critical.
-| TRIVY_REPORT_DIR | /tmp/trivyreport | no | Temporary location where trivy reports will be saved |
-| SCAN_INTERVAL | 43200 | no | Time in seconds of the execution interval |
-| HTTP_PORT | 8080 | no | Port where the endpoint will listen |
-| TRIVY_BIN_PATH | ./trivy | no | trivy binary path |
-| IGNORE_UNFIXED | true | no | hide unfixed vulnerabilities |
+| Variable                | Default Value                                                                                      | Required | Description                                                                                           |
+|-------------------------|----------------------------------------------------------------------------------------------------|----|-------------------------------------------------------------------------------------------------------|
+| LOG_LEVEL               | info                                                                                               | no | App log level. Supported values: info, warning, debug, fatal, critical.                               |
+| TRIVY_REPORT_DIR        | /tmp/trivyreport                                                                                   | no | Temporary location where trivy reports will be saved                                                  |
+| SCAN_INTERVAL           | 43200                                                                                              | no | Time in seconds of the execution interval                                                             |
+| HTTP_PORT               | 8080                                                                                               | no | Port where the endpoint will listen                                                                   |
+| TRIVY_BIN_PATH          | ./trivy                                                                                            | no | trivy binary path                                                                                     |
+| IGNORE_UNFIXED          | true                                                                                               | no | hide unfixed vulnerabilities                                                                          |
+| TRIVY_DEBUG             | false                                                                                              | no | enable log debug mode from trivy binary                                                               |
+| TRIVY_PARALLEL_THREADS  | 5                                                                                                  | no | number of goroutines enabled for parallel scanning, set 0 to auto-detect parallelism (default 5)      | 
+| TRIVY_CACHE_DIR         | /tmp/cache/trivy                                                                                   | no | cache directory                                                                                       |
+| TRIVY_CACHE_BACKEND     | fs                                                                                                 | no | cache type fs or memory                                                                               |
+| TRIVY_SCAN_TIMEOUT      | 300s                                                                                               | no | timeout (default 5m0s) for trivy command                                                              | 
+| TRIVY_CMD_SCAN_TIMEOUT  | 1200                                                                                               | no | timeout (default 20m0s) for command OS                                                                |
+| DB_REPOSITORY           | public.ecr.aws/aquasecurity/trivy-db,<p> aquasec/trivy-db,<p>ghcr.io/aquasecurity/trivy-db         | no | db vulnerabilities images (copy from images maintained aquasecurity for revolve issue ratelimit ghcr) |
+| JAVA_DB_REPOSITORY      | public.ecr.aws/aquasecurity/trivy-java-db,aquasec/trivy-java-db,ghcr.io/aquasecurity/trivy-java-db | no | db vulnerabilities images (copy from images maintained aquasecurity for revolve issue ratelimit ghcr) |
+| TRIVY_SCAN_COMMUNICATE  | no                                                                                                 | no | how python's os.exec executes command in bash and gets output log                                     |
 
 ## Performing unit tests
 Test coverage: ![](coverage.svg)
