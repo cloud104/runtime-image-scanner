@@ -73,7 +73,7 @@ def list_all_pods():
 
 
 def read_secret(namespace, secret):
-    log.debug(f"read secret: {namespace}/{secret}")
+    log.debug(f"Reading secret in namespace: {namespace}")
     v1 = client.CoreV1Api()
     try:
         secret_obj = v1.read_namespaced_secret(secret, namespace)
