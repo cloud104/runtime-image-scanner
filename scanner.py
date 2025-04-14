@@ -242,7 +242,7 @@ class Scan:
             if len(item[image]['docker_password']) > 0:
                 log.debug(f"Image {image} has password")
                 if image.split('/')[0] in item[image]['docker_password'][0]['registry_url']:
-                    log.info(f"Auth on registry {item[image]['docker_password'][0]['registry_url']}")
+                    log.info("Performing authentication on registry")
                     system_environment["TRIVY_USERNAME"] = item[image]['docker_password'][0]['username']
                     system_environment["TRIVY_PASSWORD"] = item[image]['docker_password'][0]['password']
 
