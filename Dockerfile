@@ -1,7 +1,7 @@
-FROM python:3.11-slim as base
+FROM python:3.13-slim AS base
 
 # Run tests
-FROM base as tester
+FROM base AS tester
 COPY requirements-development.txt /
 RUN pip install -r /requirements-development.txt
 RUN apt-get update && apt-get install -y make && apt-get clean autoclean && apt-get autoremove -y && rm -rf /var/lib/{apt,dpkg,cache,log}/
@@ -16,10 +16,10 @@ COPY scripts/ /app/scripts
 RUN make test
 
 # If tests OK, download all deps and install download trivy
-FROM base as builder
+FROM base AS builder
 COPY requirements.txt /
 COPY scripts/download_trivy.sh /
-ARG TRIVY_VERSION=0.47.0
+ARG TRIVY_VERSION=0.58.0
 RUN apt-get update && apt-get install -y wget && apt-get clean autoclean && apt-get autoremove -y && rm -rf /var/lib/{apt,dpkg,cache,log}/
 RUN pip install --user -r /requirements.txt && \
     chmod +x /download_trivy.sh && /download_trivy.sh
@@ -33,5 +33,5 @@ WORKDIR /app
 COPY scanner.py .
 COPY version.py .
 COPY --from=builder /tmp/trivy .
-ENV TRIVY_CACHE_DIR /data/trivycache
+ENV TRIVY_CACHE_DIR=/data/trivycache
 CMD ["/usr/local/bin/python", "/app/scanner.py"]

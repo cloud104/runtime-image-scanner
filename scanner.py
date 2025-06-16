@@ -22,14 +22,25 @@ from version import VERSION
 QUEUE = queue.Queue()
 VUL_LIST = dict()
 VUL_POINTS = bytes()
+# Obtém o número de threads a partir da variável de ambiente ou define o padrão como 2
+TRIVY_SCAN_THREADS = int(os.getenv("TRIVY_SCAN_THREADS", "2"))
 LOG_LEVEL = os.getenv("LOG_LEVEL", "info").replace(" ", "").lower()
-TRIVY_REPORT_DIR = os.getenv("TRIVY_REPORT_DIR", "/tmp/trivyreport")
+TRIVY_REPORT_DIR=os.getenv("TRIVY_REPORT_DIR", "/tmp/trivyreport")
 SCAN_INTERVAL = os.getenv("SCAN_INTERVAL", "120")
 HTTP_SERVER_PORT = os.getenv("HTTP_PORT", "8080")
 TRIVY_BIN_PATH = os.getenv("TRIVY_BIN_PATH", "./trivy")
+IGNORE_UNFIXED = os.getenv("IGNORE_UNFIXED", "true")
+TRIVY_DEBUG=os.getenv("TRIVY_DEBUG", "false").lower()
+TRIVY_PARALLEL_THREADS=os.getenv("TRIVY_PARALLEL_THREAD", "5")
+TRIVY_CACHE_DIR=os.getenv("TRIVY_CACHE_DIR", "/tmp/cache/trivy")
+TRIVY_CACHE_BACKEND=os.getenv("TRIVY_CACHE_BACKEND", "fs")
+TRIVY_SCAN_TIMEOUT=os.getenv("TRIVY_SCAN_TIMEOUT","300s")
+TRIVY_CMD_SCAN_TIMEOUT=os.getenv("TRIVY_CMD_SCAN_TIMEOUT", "1200") # em segundos
+DB_REPOSITORY= os.getenv("DB_REPOSITORY", "public.ecr.aws/aquasecurity/trivy-db,aquasec/trivy-db,ghcr.io/aquasecurity/trivy-db")
+JAVA_DB_REPOSITORY=os.getenv("JAVA_DB_REPOSITORY", "public.ecr.aws/aquasecurity/trivy-java-db,aquasec/trivy-java-db,ghcr.io/aquasecurity/trivy-java-db")
+TRIVY_SCAN_COMMUNICATE=os.getenv("TRIVY_SCAN_COMMUNICATE", "false")
 log = logging.getLogger(__name__)
 log_format = '%(asctime)s - [%(levelname)s] [%(threadName)s] [%(funcName)s:%(lineno)d]- %(message)s'
-
 log_config = {
     "debug": logging.DEBUG,
     "info": logging.INFO,
@@ -37,6 +48,9 @@ log_config = {
     "critical": logging.CRITICAL,
     "fatal": logging.FATAL
 }
+
+# Base do comando com ou sem --debug, dependendo de TRIVY_DEBUG
+trivy_debug_option = f"--debug " if TRIVY_DEBUG == "true" else ""
 
 try:
     logging.basicConfig(level=log_config[LOG_LEVEL], format=log_format)
@@ -59,12 +73,15 @@ def list_all_pods():
 
 
 def read_secret(namespace, secret):
-    log.debug("read secret: {}/{}".format(namespace, secret))
+    log.debug(f"Reading secret in namespace: {namespace}")
     v1 = client.CoreV1Api()
     try:
         secret_obj = v1.read_namespaced_secret(secret, namespace)
     except ApiException as err:
-        raise KApiException(err)
+        if '"reason":"NotFound"' in err.body:
+            raise KApiException("SECRET NOT FOUND")
+        else:
+            raise KApiException(err)
     try:
         decoded_password = base64.b64decode(secret_obj.data['.dockerconfigjson']).decode()
     except KeyError:
@@ -119,16 +136,16 @@ def parse_pods(get_docker_auth=True):
                         a[pod.metadata.name]['docker_password'] \
                             .append(read_secret(pod.metadata.namespace, secret.name))
                 except DockerConfigNotFound:
-                    log.info("The Secret {} don't have .dockerconfigjson key.".format(secret.name))
+                    log.info(f"The Secret {secret.name} don't have .dockerconfigjson key.")
                 except KApiException as err:
                     log.info("Error reading secret found on pod. The error returned by "
-                             "kubernetes api was: {}".format(err))
+                             f"kubernetes api was: {err}")
+                    log.debug(f"Error reading secret {secret.name}  found on pod: {pod.metadata.name} in namespace {pod.metadata.namespace}. The error returned by "
+                             f"kubernetes api was: {err}")
                 except KeyError:
-                    log.info("POD: {} | "
-                             "Namespace: {} | "
-                             "Invalid docker auth on secret {}".format(pod.metadata.name,
-                                                                       pod.metadata.namespace,
-                                                                       secret.name))
+                    log.info(f"POD: {pod.metadata.name} | "
+                             f"Namespace: {pod.metadata.namespace} | "
+                             f"Invalid docker auth on secret {secret.name}")
     log.debug("end parse pods")
     return parsed_pod
 
@@ -164,11 +181,11 @@ def enqueue():
 
 def parse_scan(image):
     log.debug("parse scan")
-    with open("{}/{}.json".format(TRIVY_REPORT_DIR, image), "r") as f:
+    with open(f"{TRIVY_REPORT_DIR}/{image}.json", "r") as f:
         try:
             vul_list = json.loads(f.read())
         except json.decoder.JSONDecodeError:
-            log.error("Error decoding trivy output scan: {}".format(image))
+            log.error(f"Error decoding trivy output scan: {image}")
             return {}
     log.debug("end parse scan")
     return vul_list
@@ -177,50 +194,82 @@ def parse_scan(image):
 class Scan:
     RUNNING = True
 
-    def trivy(self):
+    def trivy(self, cache_id):
         log.debug("trivy scan")
         while self.RUNNING and not QUEUE.empty():
             item = QUEUE.get()
             image = list(item.keys())[0]
+            cache_dir = f"{TRIVY_CACHE_DIR}_"+f"{cache_id}"
             safe_image = image.replace("/", "__")
-            log.info("Scanning image: {}".format(image))
+            log.info(f"Scanning image: {image}")
             system_environment = os.environ.copy()
-            cmd_clear_cache = ["{} image --clear-cache {}".format(TRIVY_BIN_PATH, image)]
-            cmd = ["{} image --format=json --ignore-unfixed=true --output={}/{}.json {}".format(TRIVY_BIN_PATH,
-                                                                                                TRIVY_REPORT_DIR,
-                                                                                                safe_image,
-                                                                                                image)]
+            # Base do comando com ou sem --cache-dir, dependendo de TRIVY_CACHE_BACKEND
+            cache_dir_option = f"--cache-dir {cache_dir} " if TRIVY_CACHE_BACKEND == "fs" else ""
+            trivy_timeout_option = f"--timeout {TRIVY_SCAN_TIMEOUT} " if TRIVY_SCAN_TIMEOUT != "300s" else ""
+            trivy_parallel_threads_option = f"--parallel {TRIVY_PARALLEL_THREADS} " if TRIVY_PARALLEL_THREADS != "5" else ""
+            cmd_clear_cache = [
+                f"{TRIVY_BIN_PATH} clean "
+                f"--scan-cache "
+                f"{trivy_debug_option}"
+                f"--cache-dir {cache_dir} "
+                f"{image}"
+            ]
+            cmd = [
+                f"{TRIVY_BIN_PATH} image "
+                f"{cache_dir_option} "
+                f"--format=json "
+                f"--ignore-unfixed={IGNORE_UNFIXED} "
+                f"{trivy_debug_option}"
+                f"{trivy_timeout_option}"
+                f"{trivy_parallel_threads_option}"
+                f"--db-repository {DB_REPOSITORY} "
+                f"--java-db-repository {JAVA_DB_REPOSITORY} "
+                f"--output={TRIVY_REPORT_DIR}/{safe_image}.json "
+                f"{image}"
+            ]
 
-            log.debug("Trivy clear cache cmd: {}".format(cmd_clear_cache))
+            log.debug(f"Trivy clear cache cmd: {cmd_clear_cache}")
             trivy_clear_cache = subprocess.Popen(cmd_clear_cache, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                                  shell=True, env=system_environment)
-            log.debug("STDOUT Clean Cache: {}".format(trivy_clear_cache.stdout.read().decode()))
-            log.debug("STDERR Clean Cache: {}".format(trivy_clear_cache.stderr.read().decode()))
-            log.debug("STATUS CODE Clean Cache {}".format(trivy_clear_cache.returncode))
+            log.debug(f"STDOUT Clean Cache: {trivy_clear_cache.stdout.read().decode()}")
+            log.debug(f"STDERR Clean Cache: {trivy_clear_cache.stderr.read().decode()}")
+            log.debug(f"STATUS CODE Clean Cache {trivy_clear_cache.returncode}")
             trivy_clear_cache.wait()
 
-            log.debug("Image: {} password len: {}".format(image, len(item[image]['docker_password'])))
-            log.debug("Image {} password content: {}".format(image, item[image]['docker_password']))
+            log.debug(f"Image: {image} password len: {len(item[image]['docker_password'])}")
+            log.debug(f"Image {image} password content: {item[image]['docker_password']}")
 
             if len(item[image]['docker_password']) > 0:
-                log.debug("Image {} has password".format(image))
+                log.debug(f"Image {image} has password")
                 if image.split('/')[0] in item[image]['docker_password'][0]['registry_url']:
-                    log.info("Auth on registry {}".format(item[image]['docker_password'][0]['registry_url']))
+                    log.info("Performing authentication on registry")
                     system_environment["TRIVY_USERNAME"] = item[image]['docker_password'][0]['username']
                     system_environment["TRIVY_PASSWORD"] = item[image]['docker_password'][0]['password']
 
-            log.debug("Trivy scan cmd: {}".format(cmd))
+            log.debug(f"Trivy scan cmd: {cmd}")
             trivy_scan = subprocess.Popen(cmd,
                                           stdout=subprocess.PIPE,
                                           stderr=subprocess.PIPE,
                                           env=system_environment,
                                           shell=True)
-            trivy_scan.wait()
-            log.debug("STDOUT: {}".format(trivy_scan.stdout.read().decode()))
-            log.debug("STDERR: {}".format(trivy_scan.stderr.read().decode()))
-            log.debug("STATUS CODE: {}".format(trivy_scan.returncode))
-            # log.debug("Parse scan: {}".format(parse_scan(safe_image)))
-            VUL_LIST[image] = parse_scan(safe_image)
+            if TRIVY_SCAN_COMMUNICATE == "true":
+                # Usa communicate para evitar problemas de buffer e capturar saída
+                stdout, stderr = trivy_scan.communicate(timeout=int(TRIVY_CMD_SCAN_TIMEOUT))
+                # Loga as saídas do comando
+                log.debug(f"STDOUT Scan: {stdout.decode()}")
+                log.debug(f"STDERR Scan: {stderr.decode()}")
+                log.debug(f"STATUS CODE Scan: {trivy_scan.returncode}")
+            else:
+                trivy_scan.wait(timeout=int(TRIVY_CMD_SCAN_TIMEOUT))
+                log.debug(f"STDOUT: {trivy_scan.stdout.read().decode()}")
+                log.debug(f"STDERR: {trivy_scan.stderr.read().decode()}")
+                log.debug(f"STATUS CODE: {trivy_scan.returncode}")
+
+            if trivy_scan.returncode == 0:
+                #log.debug(f"PARSE SCAN: {parse_scan(safe_image)}")
+                VUL_LIST[image] = parse_scan(safe_image)
+            if trivy_scan.returncode == 1:
+                log.debug(f"SCAN: {image} finished with errors, Wait until next round.....   ")
             # log.debug(VUL_LIST)
             QUEUE.task_done()
             log.debug("passou o task_done")
@@ -251,43 +300,41 @@ def get_pods_associated_with_ingress():
     for ingress in ingresses.items:
         for rule in ingress.spec.rules:
             if rule.http is None:
-                log.warning("Ingress: {} Rule: is None".format(rule.host))
+                log.warning(f"Ingress: {rule.host} Rule: is None")
                 continue
             for path in rule.http.paths:
                 try:
                     service = v1.read_namespaced_service(name=path.backend.service.name,
                                                          namespace=ingress.metadata.namespace)
                 except ApiException as err:
-                    log.error("Ingress: {}, error getting service: {}".format(rule.host, err))
+                    log.error(f"Ingress: {rule.host}, error getting service: {err}")
                     continue
-                try:
-                    endpoint = v1.list_namespaced_endpoints(namespace=ingress.metadata.namespace,
-                                                            label_selector=convert_label_selector(
-                                                                service.spec.selector))
-                except ApiException as err:
-                    log.error("Ingress: {}, error getting endpoints. ".format(rule.host, err))
-                    continue
-                for ep in endpoint.items:
-                    if ep.subsets is None:
-                        log.warning("The endpoint of service {} comes empty. Skipping verification".format(
-                            path.backend.service.name))
+                if service.spec.type == "ExternalName" and service.spec.selector == None:
+                    log.warning(f"The Ingress {ingress.metadata.name} is pointing to the service {service.metadata.name} and this service is of type {service.spec.type} and does not contain a selector.  Skipping verification")
+                if service.spec.type != "ExternalName":
+                    try:
+                        endpoint = v1.list_namespaced_endpoints(namespace=ingress.metadata.namespace,
+                                                                label_selector=convert_label_selector(
+                                                                    service.spec.selector))
+                    except ApiException as err:
+                        log.error(f"Ingress: {rule.host}, error getting endpoints.{err} ")
                         continue
-                    for subset in ep.subsets:
-                        if subset.addresses is None:
-                            log.error("The endpoint subset of service {} has no address. Skipping verification".format(
-                                path.backend.service.name
-                            ))
+                    for ep in endpoint.items:
+                        if ep.subsets is None:
+                            log.warning(f"The endpoint of service {path.backend.service.name} comes empty. Skipping verification")
                             continue
-                        for address in subset.addresses:
-                            if address.target_ref is None:
-                                log.error(
-                                    "The target ref of address {} is none. Skipping verification".format(
-                                        subset.addresses
-                                    ))
+                        for subset in ep.subsets:
+                            if subset.addresses is None:
+                                log.error(f"The endpoint subset of service {path.backend.service.name} has no address. Skipping verification")
                                 continue
-                            if address.target_ref.name not in pods:
-                                pods.append(address.target_ref.name)
-    log.debug("Pods associated with ingress: {}".format(pods))
+                            for address in subset.addresses:
+                                if address.target_ref is None:
+                                    log.error(
+                                        f"The target ref of address {subset.addresses} is none. Skipping verification")
+                                    continue
+                                if address.target_ref.name not in pods:
+                                    pods.append(address.target_ref.name)
+    log.debug(f"Pods associated with ingress: {pods}")
     return pods
 
 
@@ -304,6 +351,7 @@ def create_prom_points():
                                  "PkgName",
                                  "InstalledVersion",
                                  "FixedVersion",
+                                 "Status",
                                  "Severity"], registry=registry)
     pods = parse_pods(get_docker_auth=False)
     public_pods = get_pods_associated_with_ingress()
@@ -316,7 +364,7 @@ def create_prom_points():
                         log.debug("Vulnerabilities keys not found. Passing to next list item")
                         continue
                     for v in t["Vulnerabilities"]:
-                        log.info("Prom point pod: {}".format(p))
+                        log.info(f"Prom point pod: {p}")
                         vulnerability_gauge.labels(
                             p,
                             pod[p]['namespace'],
@@ -326,52 +374,36 @@ def create_prom_points():
                             v["VulnerabilityID"],
                             v["PkgName"],
                             v["InstalledVersion"],
-                            v["FixedVersion"],
+                            v.get("FixedVersion", "NA"),
+                            v["Status"],
                             v["Severity"]
                         ).set(1)
-                        log.debug("Set Point to pod: {} with values: |"
-                                  "namespace: {} |"
-                                  "image: {} | "
-                                  "is public? {} | "
-                                  "base os: {} | "
-                                  "CVE: {} |"
-                                  "Package: {} |"
-                                  "Installed Version: {} |"
-                                  "Fixed in Version: {} |"
-                                  "Severity: {}".format(p,
-                                                        pod[p]['namespace'],
-                                                        container,
-                                                        str(p in public_pods),
-                                                        t["Type"],
-                                                        v["VulnerabilityID"],
-                                                        v["PkgName"],
-                                                        v["InstalledVersion"],
-                                                        v["FixedVersion"],
-                                                        v["Severity"])
+                        log.debug(f"Set Point to pod: {p} with values: |"
+                                  f"namespace: {pod[p]['namespace']} |"
+                                  f"image: {container} | "
+                                  f"is public? {str(p in public_pods)} | "
+                                  f"base os: {t['Type']} | "
+                                  f"CVE: {v['VulnerabilityID']} |"
+                                  f"Package: {v['PkgName']} |"
+                                  f"Installed Version: {v['InstalledVersion']} |"
+                                  f"Fixed in Version: {v.get('FixedVersion', 'NA')} |"
+                                  f"Status: {v['Status']} |"
+                                  f"Severity: {v['Severity']}"
                                   )
 
             except TypeError:
-                log.info("Prom point pod: {}".format(p))
-                log.debug("Set Point to pod: {} with values: |"
-                          "namespace: {}|"
-                          "image: {} | "
-                          "is public? {} | "
-                          "base os: {} | "
-                          "CVE: {} |"
-                          "Package: {} |"
-                          "Installed Version: {} |"
-                          "Fixed in Version: {} |"
-                          "Severity: {}".format(p,
-                                                pod[p]['namespace'],
-                                                container,
-                                                str(p in public_pods),
-                                                "NA",
-                                                "NA",
-                                                "NA",
-                                                "NA",
-                                                "NA",
-                                                "NA")
-                          )
+                log.info(f"Prom point pod: {p}")
+                log.debug(f"Set Point to pod: {pod[p]['namespace']} with values: |"
+                          f"namespace: {container}|"
+                          f"image: {str(p in public_pods)} | "
+                          f'is public? {"NA"} | '
+                          f'base os: {"NA"} | '
+                          f'CVE: {"NA"} |'
+                          f'Package: {"NA"} |'
+                          f'Installed Version: {"NA"} |'
+                          f'Fixed in Version: {"NA"} |'
+                          f'Status: {"NA"} |'
+                          f'Severity: {"NA"}')
                 vulnerability_gauge.labels(
                     p,
                     pod[p]['namespace'],
@@ -382,10 +414,11 @@ def create_prom_points():
                     "NA",
                     "NA",
                     "NA",
+                    "NA",
                     "NA"
                 ).set(0)
             except KeyError:
-                log.warning("The container {} was not scanned. Wait until next round...".format(container))
+                log.warning(f"The container {container} was not scanned. Wait until next round...")
     log.debug("finished create prom points")
     return generate_latest(registry)
 
@@ -394,12 +427,15 @@ def start_threads():
     log.debug("start threads")
     enqueue()
     scan = Scan()
-    t1 = threading.Thread(target=scan.trivy)
-    t2 = threading.Thread(target=scan.trivy)
-    t1.start()
-    t2.start()
-    t1.join()
-    t2.join()
+    # Cria e inicia as threads dinamicamente
+    threads = []
+    for num in range(1, TRIVY_SCAN_THREADS + 1):
+        thread = threading.Thread(target=scan.trivy, args=(str(num),))
+        threads.append(thread)
+        thread.start()
+    # Aguarda o término de todas as threads
+    for thread in threads:
+        thread.join()
 
 
 def main():
@@ -463,8 +499,8 @@ def cleanup():
     global VUL_LIST
     VUL_LIST = dict()
     if os.path.exists(TRIVY_REPORT_DIR):
-        for f in glob.glob("{}/*.json".format(TRIVY_REPORT_DIR)):
-            log.debug("removing file: {}".format(f))
+        for f in glob.glob(f"{TRIVY_REPORT_DIR}/*.json"):
+            log.debug(f"removing file: {f}")
             os.remove(f)
 
 
@@ -474,19 +510,43 @@ def setup():
         os.makedirs(TRIVY_REPORT_DIR)
 
     if not os.path.exists(TRIVY_BIN_PATH):
-        raise FileNotFoundError("Trivy binary not found at: {}".format(TRIVY_BIN_PATH))
-    cmd_download_db = ["{} image --download-db-only".format(TRIVY_BIN_PATH)]
-    log.debug("Trivy Download db cmd: {}".format(cmd_download_db))
+        raise FileNotFoundError(f"Trivy binary not found at: {TRIVY_BIN_PATH}")
+    cmd_download_db = [
+        f"{TRIVY_BIN_PATH} "
+        f"image "
+        f"{trivy_debug_option} "
+        f"--download-db-only "
+        f"--db-repository {DB_REPOSITORY} "
+        f"--java-db-repository {JAVA_DB_REPOSITORY}"
+    ]
+    log.debug(f"Trivy Download db cmd: {cmd_download_db}")
     system_environment = os.environ.copy()
     trivy_clear_cache = subprocess.Popen(cmd_download_db, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True,
                                          env=system_environment)
-    log.debug("Trivy Download db return code: {}".format(trivy_clear_cache.returncode))
-    log.debug("Trivy Download db stdout {}".format(trivy_clear_cache.stdout.read().decode()))
-    log.debug("Trivy Download db stderr {}".format(trivy_clear_cache.stderr.read().decode()))
+    log.debug(f"Trivy Download db return code: {trivy_clear_cache.returncode}")
+    log.debug(f"Trivy Download db stdout {trivy_clear_cache.stdout.read().decode()}")
+    log.debug(f"Trivy Download db stderr {trivy_clear_cache.stderr.read().decode()}")
 
 
 if __name__ == '__main__':
-    log.info("Starting Image Scanner version: {}".format(VERSION))
+    log.info(f"Starting Image Scanner version: {VERSION}")
+    log.info(f"Starting Image Scanner trivy_scan_threads: {TRIVY_SCAN_THREADS}")
+    log.info(f"Starting Image Scanner trivy_log_level: {LOG_LEVEL}")
+    log.info(f"Starting Image Scanner trivy_debug_command: {TRIVY_DEBUG}")
+    log.info(f"Starting Image Scanner trivy_parallel_threads: {TRIVY_PARALLEL_THREADS}")
+    log.info(f"Starting Image Scanner trivy_cache_dir: {TRIVY_CACHE_DIR}")
+    log.info(f"Starting Image Scanner trivy_cache_backend: {TRIVY_CACHE_BACKEND}")
+    log.info(f"Starting Image Scanner trivy_report_dir: {TRIVY_REPORT_DIR}")
+    log.info(f"Starting Image Scanner trivy_scan_timeout: {TRIVY_SCAN_TIMEOUT}")
+    log.info(f"Starting Image Scanner tricy_cmd_scan_timeout: {TRIVY_CMD_SCAN_TIMEOUT}")
+    log.info(f"Starting Image Scanner tricu_scan_interval: {SCAN_INTERVAL}")
+    log.info(f"Starting Image Scanner trivy_http_server_port: {HTTP_SERVER_PORT}")
+    log.info(f"Starting Image Scanner trivy_bin_path: {TRIVY_BIN_PATH}")
+    log.info(f"Starting Image Scanner trivy_ignore_unfixes: {IGNORE_UNFIXED}")
+    log.info(f"Starting Image Scanner trivy_db_repository: {DB_REPOSITORY}")
+    log.info(f"Starting Image Scanner trivy_java_db_repository: {JAVA_DB_REPOSITORY}")
+    log.info(f"Starting Image Scanner trivy_scan_communicate: {TRIVY_SCAN_COMMUNICATE}")
+
     try:
         setup()
     except BaseException as e:
@@ -497,7 +557,7 @@ if __name__ == '__main__':
         try:
             main()
             cleanup()
-            log.info("Sleeping for {}s".format(SCAN_INTERVAL))
+            log.info(f"Sleeping for {SCAN_INTERVAL}s")
             time.sleep(int(SCAN_INTERVAL))
         except KeyboardInterrupt:
             log.info("Bye...")

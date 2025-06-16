@@ -184,7 +184,7 @@ class TestScan(unittest.TestCase):
         mock_popen.return_value = mock.Mock(returncode=0, stdout=stdout, stderr=stderr)
         scan = scanner.Scan()
         type(scan).RUNNING = sentinel
-        self.assertIsNone(scan.trivy())
+        self.assertIsNone(scan.trivy(cache_id=1))
 
     @mock.patch('subprocess.Popen')
     @mock.patch("scanner.unique_images")
@@ -199,7 +199,7 @@ class TestScan(unittest.TestCase):
         mock_popen.return_value = mock.Mock(returncode=0, stdout=stdout, stderr=stderr)
         scan = scanner.Scan()
         type(scan).RUNNING = sentinel
-        self.assertIsNone(scan.trivy())
+        self.assertIsNone(scan.trivy(cache_id=1))
 
     @mock.patch('subprocess.Popen')
     @mock.patch("scanner.unique_images")
@@ -214,7 +214,7 @@ class TestScan(unittest.TestCase):
         mock_popen.return_value = mock.Mock(returncode=0, stdout=stdout, stderr=stderr)
         scan = scanner.Scan()
         type(scan).RUNNING = sentinel
-        self.assertIsNone(scan.trivy())
+        self.assertIsNone(scan.trivy(cache_id=1))
 
     @mock.patch('subprocess.Popen')
     @mock.patch("scanner.unique_images")
@@ -231,7 +231,7 @@ class TestScan(unittest.TestCase):
         mock_popen.return_value = mock.Mock(returncode=0, stdout=stdout, stderr=stderr)
         scan = scanner.Scan()
         type(scan).RUNNING = sentinel
-        self.assertIsNone(scan.trivy())
+        self.assertIsNone(scan.trivy(cache_id=1))
 
 
 class TestPromPoints(unittest.TestCase):
