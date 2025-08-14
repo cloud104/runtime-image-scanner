@@ -1,3 +1,10 @@
+> [!IMPORTANT]  
+> Este projeto não é mais mantido.
+> Ele foi **descontinuado** em favor do [Trivy Operator](https://github.com/aquasecurity/trivy-operator), que 
+> agora fornece a mesma funcionalidade (e muito mais) como parte de um conjunto de recursos oficialmente suportado.
+>
+> Recomendamos a migração para o Trivy Operator para continuar recebendo atualizações, correções de segurança e melhorias.
+
 # Runtime Image Scanner
 Esse scanner de imagens docker percorre todo o cluster procurando por pods, executando um scan de vulnerabilidades nas
 imagens encontradas.

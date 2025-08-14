@@ -1,5 +1,12 @@
 PT-BR Version: [Here](README_pt-BR.md)
 
+> [!IMPORTANT]  
+> This project is no longer maintained.
+> It has been **deprecated** and favor of [Trivy Operator](https://github.com/aquasecurity/trivy-operator).
+> Which now provides the same functionality (and more) as part of its supported feature set.
+> 
+> Please migrate to Trivy Operator for ongoing updates, security fixes, and improvements.
+
 # Runtime Image Scanner
 This docker image scanner scans the entire kubernetes cluster looking for pods, performing a vulnerability scan on
 images.
